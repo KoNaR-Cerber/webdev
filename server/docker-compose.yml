@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - SERVERURL=127.0.0.1 #loopback for development
+      - SERVERPORT=51820
+      - PEERS=1
+    volumes:
+      - ./wg-config:/config
+    ports:
+      - "51820:51820/udp"
+    restart: unless-stopped
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: mediamtx
+    network_mode: "host"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+    restart: always
