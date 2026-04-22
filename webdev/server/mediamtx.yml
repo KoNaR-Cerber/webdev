@@ -1,6 +1,11 @@
 protocols: [udp]
 webrtc: yes
 webrtcAddress: :8889
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: yes
+webrtcAdditionalHosts:
+  - 10.13.13.1
+
 srt: yes
 srtAddress: :8890
 paths:
