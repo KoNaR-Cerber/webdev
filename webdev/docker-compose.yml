@@ -12,7 +12,7 @@ services:
       - SERVERPORT=51820
       - PEERS=1
     volumes:
-      - ./wg-config:/config
+      - ./server/wg-config:/config
     ports:
       - "51820:51820/udp" # WireGuard VPN port
       - "8890:8890/udp" # SRT port (Mediamtx)
@@ -36,7 +36,14 @@ services:
     container_name: emqx
     network_mode: "service:wireguard"
     environment:
-      - "EMQX_DASHBOARD__DEFAULT_USER__USERNAME=${EMQX_USERNAME}"
-      - "EMQX_DASHBOARD__DEFAULT_USER__PASSWORD=${EMQX_PASSWORD}"
+      - "EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_USERNAME}"
+      - "EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_PASSWORD}"
       - "EMQX_ALLOW_ANONYMOUS=false"
     restart: always
+  nginx:
+    image: nginx:latest
+    container_name: nginx-router
+    network_mode: "service:wireguard"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../frontend/
