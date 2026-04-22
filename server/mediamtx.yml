@@ -1,0 +1,8 @@
+protocols: [udp]
+webrtc: yes
+webrtcAddress: :8889
+srt: yes
+srtAddress: :8890
+paths:
+  jetson_stream:
+    source: publisher

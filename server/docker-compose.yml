@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   wireguard:
     image: lscr.io/linuxserver/wireguard:latest
@@ -10,19 +8,35 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - SERVERURL=127.0.0.1 #loopback for development
+      - SERVERURL=127.0.0.1
       - SERVERPORT=51820
       - PEERS=1
     volumes:
       - ./wg-config:/config
     ports:
-      - "51820:51820/udp"
+      - "51820:51820/udp" # WireGuard VPN port
+      - "8890:8890/udp" # SRT port (Mediamtx)
+      - "8889:8889" # WebRTC port (Mediamtx)
+      - "18083:18083" # EMQX Dashboard port
+      - "1883:1883" # EMQX MQTT port
+      - "8083:8083" # EMQX MQTT WebSocket port (optional, will see later)
+
     restart: unless-stopped
 
   mediamtx:
     image: bluenviron/mediamtx:latest
     container_name: mediamtx
-    network_mode: "host"
+    network_mode: "service:wireguard"
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
+    restart: always
+
+  emqx:
+    image: emqx/emqx:latest
+    container_name: emqx
+    network_mode: "service:wireguard"
+    environment:
+      - "EMQX_DASHBOARD__DEFAULT_USER__USERNAME=${EMQX_USERNAME}"
+      - "EMQX_DASHBOARD__DEFAULT_USER__PASSWORD=${EMQX_PASSWORD}"
+      - "EMQX_ALLOW_ANONYMOUS=false"
     restart: always
