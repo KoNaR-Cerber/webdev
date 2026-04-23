@@ -10,16 +10,16 @@ services:
       - PGID=1000
       - SERVERURL=127.0.0.1
       - SERVERPORT=51820
-      - PEERS=robot1,maxpc1
+      - PEERS=robot1,maxpc1,cardaverpc1, zielinskpc1
     volumes:
       - ./server/wg-config:/config
     ports:
       - "51820:51820/udp" # WireGuard VPN port
-      - "8890:8890/udp" # SRT port (Mediamtx)
-      - "8889:8889" # WebRTC port (Mediamtx)
-      - "8189:8189" # Video streaming port (Mediamtx)
       - "80:80" # Nginx HTTP port
       - "443:443" # Nginx HTTPS port
+      #- "8890:8890/udp" # SRT port (Mediamtx)
+      #- "8889:8889" # WebRTC port (Mediamtx)
+      #- "8189:8189" # Video streaming port (Mediamtx)
 
     restart: unless-stopped
 
@@ -38,7 +38,6 @@ services:
     environment:
       - "EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_USERNAME}"
       - "EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_PASSWORD}"
-      - "EMQX_ALLOW_ANONYMOUS=false"
     restart: always
 
   nginx:
