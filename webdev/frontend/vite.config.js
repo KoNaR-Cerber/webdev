@@ -3,5 +3,21 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+plugins: [react()],
+  resolve: {
+    dedupe: ['react', 'react-dom'], 
+  },
+  optimizeDeps: {
+    include: ['react-grid-layout']
+  },
+  server: {
+    proxy: {
+      // Whenever the app requests /video/..., forward it to this target
+      '/video': {
+        target: 'http://10.13.13.1',
+        changeOrigin: true,
+        secure: false, 
+      }
+    }
+  }
 })

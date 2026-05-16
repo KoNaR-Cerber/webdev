@@ -23,9 +23,22 @@ export const RobotProvider = ({ children }) => {
         });
 
         mqttClient.on('message', (topic, message) => {
-            const data = JSON.parse(message.toString());
-            setTelemetry((prev) => ({...prev, [topic.split('/').pop()]: data }));
-        });
+        const data = JSON.parse(message.toString());
+        const topicName = topic.split('/').pop();
+
+        if (topicName === 'imu') {
+            setTelemetry(prev => ({
+            ...prev,
+            imu: {
+                orientation: data.orientation,
+                angular_velocity: data.angular_velocity,
+                linear_acceleration: data.linear_acceleration
+            }
+            }));
+        } else {
+    setTelemetry(prev => ({ ...prev, [topicName]: data }));
+  }
+});
         
         setClient(mqttClient);
         return () => mqttClient.end();

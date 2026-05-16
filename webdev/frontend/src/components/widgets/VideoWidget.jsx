@@ -10,3 +10,5 @@ const VideoWidget = ({ streamName = 'jetson_stream' }) => {
     </div>
   );
 };
+
+export default VideoWidget;
