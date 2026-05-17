@@ -2,12 +2,16 @@ import aiomqtt
 from fastapi import FastAPI, status
 import asyncio
 from contextlib import asynccontextmanager
+from .db.database import write_sensor_data
 
 async def mqtt_subscriber():
-    async with aiomqtt.Client("localhost", 1883) as client:
-        await client.subscribe("test/topic")
-        async for message in client.messages:
-            print(f"Received message: {message.payload.decode()}")
+    try:
+        async with aiomqtt.Client("localhost", 1883) as client:
+            await client.subscribe("test/topic")
+            async for message in client.messages:
+                print(f"Received message: {message.payload.decode()}")
+    except Exception as e:
+        print(f"MQTT subscriber error: {e}")
 
 
 @asynccontextmanager
