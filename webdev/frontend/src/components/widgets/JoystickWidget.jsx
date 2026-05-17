@@ -16,6 +16,7 @@ const JoystickWidget = () => {
 
     const handleMove = useCallback(
         throttle((data) => {
+            if (!data || data.force === undefined || !data.angle) return;
             const force = Math.min(data.force, 1);
             const angleRad = data.angle.radian;
             const forwardSpeed = Math.sin(angleRad) * force;
@@ -26,8 +27,7 @@ const JoystickWidget = () => {
                 angular: { x: 0.0, y: 0.0, z: turnSpeed }
             };
             
-            sendCommandRef.current('cmd_vel', twistMsg);
-        }, 100),
+            sendCommandRef.current('/cmd_vel_server', 'geometry_msgs/Twist', twistMsg);        }, 100),
         [] 
     );
 
@@ -36,8 +36,7 @@ const JoystickWidget = () => {
             linear: { x: 0.0, y: 0.0, z: 0.0 },
             angular: { x: 0.0, y: 0.0, z: 0.0 }
         };
-        sendCommandRef.current('cmd_vel', stopMsg);
-    }, []);
+            sendCommandRef.current('/cmd_vel_server', 'geometry_msgs/Twist', stopMsg);    }, []);
 
     // SINGLE, CONSOLIDATED USE-EFFECT
     useEffect(() => {

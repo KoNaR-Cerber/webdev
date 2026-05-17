@@ -8,7 +8,7 @@ plugins: [react()],
     dedupe: ['react', 'react-dom'], 
   },
   optimizeDeps: {
-    include: ['react-grid-layout']
+    include: ['react-grid-layout', 'roslib']
   },
   server: {
     proxy: {

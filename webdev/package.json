@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "chart.js": "^4.5.1",
+    "lodash": "^4.18.1",
+    "mqtt": "^5.15.1",
+    "nipplejs": "^1.0.1",
+    "react-chartjs-2": "^5.3.1",
+    "react-grid-layout": "^2.2.3"
+  }
+}

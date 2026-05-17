@@ -1,16 +1,44 @@
-# React + Vite
+# Robot Web Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React-based web interface for remotely monitoring and controlling a ROS 2 robot. This dashboard connects to the robot via a WireGuard VPN, consuming low-latency WebRTC video streams and interfacing with ROS topics via `rosbridge_server`.
 
-Currently, two official plugins are available:
+## Features
+* **Dual WebRTC Video Streams:** Real-time, low-latency video monitoring (Main Camera & Thermal Vision) powered by MediaMTX and WHEP.
+* **Keyboard Teleoperation (WASD):** Global keyboard event listeners that publish `geometry_msgs/Twist` commands directly to `/cmd_vel_server` with real-time visual UI feedback.
+* **Virtual Joystick:** Touch/mouse compatible joystick for analog velocity control.
+* **Telemetry Dashboard:** Reactive UI components for monitoring robot state (IMU, Battery levels).
+* **Customizable Layout:** Draggable and resizable widgets utilizing `react-grid-layout`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Architecture & Tech Stack
+* **Frontend Framework:** React (Vite)
+* **ROS 2 Integration:** `roslibjs` (connecting to `rosbridge_server` via WebSockets)
+* **Video Streaming:** MediaMTX (SRT to WebRTC translation)
+* **Networking:** WireGuard VPN Gateway & Nginx Reverse Proxy
 
-## React Compiler
+## Installation
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. Clone the repository:
+    git clone <repository-url>
+    cd <project-directory>
 
-## Expanding the ESLint configuration
+2. Install dependencies:
+    npm install
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Running the Dashboard
+
+**Development Mode:**
+Run the Vite development server with hot-module replacement.
+    npm run dev
+
+**Production Build:**
+To build the app for production deployment:
+    npm run build
+
+This will generate a `dist/` folder containing the compiled static assets.
+
+## Widget Ecosystem
+The UI is modular. To add new capabilities:
+1. Create a new widget in `src/widgets/` (e.g., `MyNewWidget.jsx`).
+2. Wrap its content in the reusable `<Card>` UI component.
+3. Hook into ROS data using `const { telemetry, sendCommand } = useRobot();`.
+4. Add it to the grid layout inside `src/components/Dashboard.jsx`.
