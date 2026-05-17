@@ -21,6 +21,10 @@ async def lifespan(app: FastAPI):
     yield
     # Clean up the MQTT subscriber when the app is shutting down
     mqtt_task.cancel()
+    try:
+        await mqtt_task
+    except asyncio.CancelledError:
+        pass
 
 app = FastAPI(lifespan=lifespan)
 
