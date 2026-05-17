@@ -29,22 +29,15 @@ Do realizacji projektu wykorzystany jest Docker ze zdefiniowanymi następującym
    - Udostępnia strumień w przeglądarce za pomocą **WebRTC** dla minimalnego opóźnienia. Konfiguracja wykorzystuje port `8889` do sygnalizacji oraz statyczny port `8189` (TCP) do przesyłu danych multimedialnych.
    - Skonfigurowana ścieżka dla głównej kamery to `jetson_stream`.
 
-4. **EMQX (Broker MQTT - Telemetria)**
+4. **Mosquitto (Broker MQTT - Telemetria)**
    - Zarządza odbiorem danych telemetrycznych.
-   - Dashboard administracyjny jest chroniony zmiennymi środowiskowymi (login i hasło podawane z pliku `.env`).
 
 ## Dostępne Endpointy (Dla podłączonych do VPN)
 
 Po podłączeniu się do sieci WireGuard, poszczególne interfejsy są dostępne pod adresem IP serwera (domyślnie `10.13.13.1`):
 
 - **Główny interfejs (UI)**: `https://10.13.13.1/`
-- **Odtwarzacz Wideo (WebRTC)**: `https://10.13.13.1/video/jetson_stream` 
-- **Dashboard Telemetrii EMQX**: `https://10.13.13.1/dash/`
 
-## Zmienne środowiskowe
-Do poprawnego uruchomienia projektu wymagany jest plik `.env` zawierający przynajmniej następujące zmienne dla zabezpieczenia brokera MQTT:
-- `EMQX_USERNAME`
-- `EMQX_PASSWORD`
 
 ## Uruchomienie
 Aby uruchomić całe środowisko, wykonaj:
