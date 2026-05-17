@@ -11,5 +11,5 @@ srtAddress: :8890
 paths:
   video/normal_cam:
     source: publisher
-  video/IR_cam
+  video/IR_cam:
     source: publisher
