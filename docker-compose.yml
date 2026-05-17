@@ -8,7 +8,7 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - SERVERURL=178.104.138.10
+      - SERVERURL=${SERVER_IP}
       - SERVERPORT=51820
       - PEERS=robot1,maxpc1,maxpc2,borsukpc1,cardaverpc1,zielinskpc1,antonpc1
     volumes:
