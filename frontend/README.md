@@ -38,7 +38,7 @@ This will generate a `dist/` folder containing the compiled static assets.
 
 ## Widget Ecosystem
 The UI is modular. To add new capabilities:
-1. Create a new widget in `src/widgets/` (e.g., `MyNewWidget.jsx`).
+1. Create a new widget in `src/components/widgets/` (e.g., `MyNewWidget.jsx`).
 2. Wrap its content in the reusable `<Card>` UI component.
 3. Hook into ROS data using `const { telemetry, sendCommand } = useRobot();`.
-4. Add it to the grid layout inside `src/components/Dashboard.jsx`.
+4. Add it to the grid layout inside `src/components/layout/Dashboard.jsx`.
