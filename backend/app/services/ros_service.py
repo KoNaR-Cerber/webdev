@@ -1,5 +1,9 @@
 import roslibpy
 import janus
+import os
+
+__host__ = os.getenv("ROSBRIDGE_HOST", "localhost")
+
 
 class RosManager:
     """
@@ -10,8 +14,8 @@ class RosManager:
         - Provides methods to subscribe to ROS topics and handle incoming messages.
         - Ensures that incoming messages are safely enqueued for asynchronous processing.
     """
-    def __init__(self, host='10.13.13.1', port=9090):
-        self.host = host
+    def __init__(self, port=9090):
+        self.host = __host__
         self.port = port
         self.ros_client = None
         self.active_topics: dict[str,roslibpy.Topic] = {}
