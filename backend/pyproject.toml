@@ -8,6 +8,8 @@ dependencies = [
     "aiomqtt>=2.5.1",
     "fastapi[standard]>=0.136.1",
     "influxdb-client[async]>=1.50.0",
+    "janus>=2.0.0",
+    "roslibpy>=2.0.0",
 ]
 [tool.pyright]
 typeCheckingMode = "basic"
