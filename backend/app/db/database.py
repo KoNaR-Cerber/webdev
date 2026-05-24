@@ -22,12 +22,19 @@ class InfluxDBManager:
         """Write telemetry data to InfluxDB."""
         try:
             point = Point("ros_telemetry").tag("topic", topic_name)
+            has_fields = False
 
             for key, value in ros_message.items():
                 if isinstance(value, (int, float, str, bool)):
                     point.field(key, value)
+                    has_fields = True
                 else:
                     print(f"Skipping unsupported field type for key: {key}")
+
+            if not has_fields:
+                print(f"Skipping telemetry write for topic '{topic_name}': no supported fields found")
+                return
+
             await self.write_api.write(bucket=INFLUXDB_BUCKET, record=point)
         except Exception as e:
             print(f"Error writing telemetry data: {e}")
