@@ -52,11 +52,12 @@ services:
     volumes:
       - ./server/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./server/certs:/etc/nginx/certs:ro
-      - ./server/frontend:/usr/share/nginx/html:ro
+      - frontend-dist:/usr/share/nginx/html:ro
     depends_on:
       - mediamtx
       - mosquitto
       - backend
+      - frontend
     restart: always
 
   backend:
@@ -76,9 +77,10 @@ services:
     network_mode: "service:wireguard"
     volumes:
       - frontend-dist:/app/dist
+    command: "sh -c npm run build"
     depends_on:
       - wireguard
-    restart: always
+    restart: no
 
   influxdb:
     image: influxdb:2
