@@ -52,6 +52,7 @@ services:
     volumes:
       - ./server/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./server/certs:/etc/nginx/certs:ro
+      - ./server/frontend:/usr/share/nginx/html:ro
     depends_on:
       - mediamtx
       - mosquitto
@@ -67,6 +68,16 @@ services:
       - influxdb
     env_file:
       - .env
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    network_mode: "service:wireguard"
+    volumes:
+      - frontend-dist:/app/dist
+    depends_on:
+      - wireguard
     restart: always
 
   influxdb:
@@ -86,3 +97,6 @@ services:
     depends_on:
       - wireguard
     restart: always
+
+volumes:
+  frontend-dist:
