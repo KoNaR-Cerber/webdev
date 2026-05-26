@@ -7,7 +7,7 @@ const WebRTCCamera = ({ title, streamPath }) => {
 
     useEffect(() => {
         // !!! possibly change it later? !!!
-        const whepUrl = `http://10.13.13.1:8889/${streamPath}/whep`;
+        const whepUrl = `https://10.13.13.1/${streamPath}/whep`;
 
         const startStream = async () => {
             peerConnection.current = new RTCPeerConnection();
