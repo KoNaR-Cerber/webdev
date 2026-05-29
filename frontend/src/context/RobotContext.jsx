@@ -30,6 +30,7 @@ export const RobotProvider = ({ children }) => {
     rosClient.on("connection", () => {
       console.log("Connected to websocket server.");
       setRos(rosClient);
+      setConnectionStatus("CONNECTED")
 
       // Example: Subscribing to IMU data natively with roslibjs
       const imuListener = new ROSLIB.Topic({
