@@ -13,7 +13,7 @@ export const RobotProvider = ({ children }) => {
     useEffect(() => {
         // Default rosbridge port is usually 9090
         const rosClient = new ROSLIB.Ros({
-            url: 'ws://10.13.13.1:9090' //      !REPLACE!
+            url: 'ws://10.13.13.2:9090' //      !REPLACE!
         });
 
         rosClient.on('connection', () => {
