@@ -68,10 +68,10 @@ class RosManager:
         if topic_name in self.desired_subscriptions:
             return False  # Already subscribed
         self.desired_subscriptions[topic_name] = message_type
-        if not self.is_connected:
+        if self.is_connected:
             self._create_subscription(topic_name, message_type)
         else:
-            print(f"⚠️ Cannot subscribe to {topic_name} - not connected to ROS bridge.")
+            print(f"⚠️ Queued subscription to {topic_name} - not connected to ROS bridge.")
         return True
 
     def _resubscribe_all(self):
