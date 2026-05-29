@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
     ros_manager.queue = queue
     tasks["ros_monitor"] = asyncio.create_task(ros_connection_monitor())
     yield
-    ros_manager.disconnect()
+    ros_manager.terminate()
     for task in ["ros_monitor", "queue_worker"]:
         if task in tasks:
             tasks[task].cancel()
