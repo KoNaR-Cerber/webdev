@@ -82,8 +82,7 @@ export const RobotProvider = ({ children }) => {
         });
       }
 
-      const message = new ROSLIB.Message(data);
-      topicsRef.current[topicName].publish(message);
+      topicsRef.current[topicName].publish(data);
     },
     [ros],
   );

@@ -33,7 +33,7 @@ const WasdWidget = () => {
     };
 
     sendCommand("/cmd_vel_server", "geometry_msgs/Twist", twistMsg);
-  }, [keys, sendCommand]);
+  }, [keys, sendCommand, isConnected]);
 
   const handleKeyDown = useCallback((e) => {
     const key = e.key.toUpperCase();
