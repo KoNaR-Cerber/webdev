@@ -17,6 +17,7 @@ async def lifespan(app: FastAPI):
     await db_manager.connect()
     queue = janus.Queue(maxsize=100000)
     tasks["queue_worker"] = asyncio.create_task(influxdb_queue_worker(queue))
+    print(f"🚀 Starting ROS bridge connection to {ros_manager.host}:{ros_manager.port}...")
     ros_manager.connect(queue)
     yield
     ros_manager.disconnect()
