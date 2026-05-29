@@ -12,18 +12,30 @@ from .schemas import SubscriptionRequest
 tasks = {}
 
 
+async def ros_connection_monitor():
+    while True:
+        if not ros_manager.is_connected:
+            await asyncio.to_thread(ros_manager.connect)
+        await asyncio.sleep(15)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db_manager.connect()
     queue = janus.Queue(maxsize=100000)
     tasks["queue_worker"] = asyncio.create_task(influxdb_queue_worker(queue))
-    print(f"🚀 Starting ROS bridge connection to {ros_manager.host}:{ros_manager.port}...")
-    ros_manager.connect(queue)
+    print(
+        f"🚀 Starting ROS bridge connection to {ros_manager.host}:{ros_manager.port}..."
+    )
+    ros_manager.queue = queue
+    tasks["ros_monitor"] = asyncio.create_task(ros_connection_monitor())
     yield
     ros_manager.disconnect()
-    if "queue_worker" in tasks:
-        tasks["queue_worker"].cancel()
-        await asyncio.gather(tasks["queue_worker"], return_exceptions=True)
+    for task in ["ros_monitor", "queue_worker"]:
+        if task in tasks:
+            tasks[task].cancel()
+
+    await asyncio.gather(*[tasks[t] for t in tasks], return_exceptions=True)
     await db_manager.close()
 
 
@@ -37,12 +49,10 @@ async def health_check():
 
 @app.get("/api/v1/topics", status_code=status.HTTP_200_OK)
 async def list_topics():
-    is_connected: bool = bool(
-        ros_manager.ros_client and ros_manager.ros_client.is_connected
-    )
     return {
-        "connected_to_rosbridge": is_connected,
+        "connected_to_rosbridge": ros_manager.is_connected,
         "active_topics": list(ros_manager.active_topics.keys()),
+        "queued_subscriptions": list(ros_manager.desired_subscriptions.keys()),
     }
 
 
@@ -53,17 +63,18 @@ async def subscribe_topic(req: SubscriptionRequest):
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Topic name must start with '/'",
         )
-    try:
-        success = ros_manager.subscribe(req.topic, req.message_type)
-        if not success:
-            return {"message": f"Already subscribed to topic: {req.topic}"}
-        return {
-            "message": f"Subscribed to topic: {req.topic} with type: {req.message_type}"
-        }
-    except RuntimeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)
-        )
+
+    # We no longer crash if offline; we just queue it.
+    success = ros_manager.subscribe(req.topic, req.message_type)
+    if not success:
+        return {"message": f"Already subscribed (or queued) to topic: {req.topic}"}
+
+    connection_status = (
+        "Subscribed" if ros_manager.is_connected else "Queued subscription"
+    )
+    return {
+        "message": f"{connection_status} to topic: {req.topic} with type: {req.message_type}"
+    }
 
 
 # async def mqtt_subscriber():
