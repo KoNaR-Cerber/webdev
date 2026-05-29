@@ -11,9 +11,11 @@ export const RobotProvider = ({ children }) => {
     const topicsRef = useRef({}); 
 
     useEffect(() => {
-        // Default rosbridge port is usually 9090
+        const isSecure = window.location.protocol === 'https:';
+        const protocol = isSecure ? 'wss' : 'ws';
+        const rosURL = `${protocol}://${window.location.host}/rosbridge`; // Adjust path if your rosbridge is served differently
         const rosClient = new ROSLIB.Ros({
-            url: 'ws://10.13.13.2:9090' //      !REPLACE!
+            url: rosURL
         });
 
         rosClient.on('connection', () => {
