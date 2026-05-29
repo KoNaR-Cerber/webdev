@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRobot } from "../../context/RobotContext";
 
 const WasdWidget = () => {
-  const { sendCommand } = useRobot();
+  const {connectionStatus, sendCommand} = useRobot();
   const [keys, setKeys] = useState({
     Q: false,
     W: false,
