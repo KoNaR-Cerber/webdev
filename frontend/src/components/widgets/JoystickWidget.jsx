@@ -38,7 +38,7 @@ const JoystickWidget = () => {
         };
             sendCommandRef.current('/cmd_vel_server', 'geometry_msgs/Twist', stopMsg);    }, []);
 
-    // SINGLE, CONSOLIDATED USE-EFFECT
+            
     useEffect(() => {
         if (!joyRef.current) return;
 

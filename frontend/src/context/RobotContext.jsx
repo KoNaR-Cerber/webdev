@@ -89,7 +89,7 @@ export const RobotProvider = ({ children }) => {
   );
 
   return (
-    <RobotContext.Provider value={{ connectionStatus, telemetry, sendCommand }}>
+    <RobotContext.Provider value={{ ros, connectionStatus, telemetry, sendCommand }}>
       {children}
     </RobotContext.Provider>
   );

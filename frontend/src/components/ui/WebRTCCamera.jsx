@@ -1,12 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import Card from './Card'; // Using the Card component we built earlier
+import Card from './Card';
 
 const WebRTCCamera = ({ title, streamPath }) => {
     const videoRef = useRef(null);
     const peerConnection = useRef(null);
 
     useEffect(() => {
-        // !!! possibly change it later? !!!
         const whepUrl = `https://10.13.13.1/${streamPath}/whep`;
 
         const startStream = async () => {
