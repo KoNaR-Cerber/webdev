@@ -24,18 +24,18 @@ const WasdWidget = () => {
         if (!isConnected) return;
 
         const intervalId = setInterval(() => {
-            
+		const keys = activeKeysRef.current;
         
-        const linearX = (activeKeys.W ? 1.0 : 0.0) + (activeKeys.S ? -1.0 : 0.0);
-        const linearY = (activeKeys.A ? 1.0 : 0.0) + (activeKeys.D ? -1.0 : 0.0);
-        const angularZ = (activeKeys.Q ? 1.0 : 0.0) + (activeKeys.E ? -1.0 : 0.0);
+		const linearX = (keys.W ? 1.0 : 0.0) + (keys.S ? -1.0 : 0.0);
+		const linearY = (keys.A ? 1.0 : 0.0) + (keys.D ? -1.0 : 0.0);
+		const angularZ = (keys.Q ? 1.0 : 0.0) + (keys.E ? -1.0 : 0.0);
 
-        const twistMsg = {
-            linear: { x: linearX, y: linearY, z: 0.0 },
-            angular: { x: 0.0, y: 0.0, z: angularZ }, 
-        };
+		const twistMsg = {
+		    linear: { x: linearX, y: linearY, z: 0.0 },
+		    angular: { x: 0.0, y: 0.0, z: angularZ }, 
+		};
 
-        sendCommand("/cmd_vel_server", "geometry_msgs/Twist", twistMsg);
+		sendCommand("/robot/cmd_vel_server", "geometry_msgs/Twist", twistMsg);
         }, 100)
 
        return () => clearInterval(intervalId);

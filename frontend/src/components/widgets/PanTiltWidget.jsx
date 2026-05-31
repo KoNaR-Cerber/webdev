@@ -34,8 +34,8 @@ const PanTiltWidget = () => {
             const keys = activeKeysRef.current;
 
             // X corresponds to Left/Right, Y corresponds to Up/Down
-            const panX = (activeKeys.RIGHT ? 1.0 : 0.0) + (activeKeys.LEFT ? -1.0 : 0.0);
-            const tiltY = (activeKeys.UP ? 1.0 : 0.0) + (activeKeys.DOWN ? -1.0 : 0.0);
+            const panX = (keys.RIGHT ? 1.0 : 0.0) + (keys.LEFT ? -1.0 : 0.0);
+            const tiltY = (keys.UP ? 1.0 : 0.0) + (keys.DOWN ? -1.0 : 0.0);
             
             const twistMsg = {
                 linear: { x: panX, y: tiltY, z: 0.0 },
