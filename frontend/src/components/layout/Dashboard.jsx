@@ -13,6 +13,7 @@ import JoystickWidget from '../widgets/JoystickWidget';
 import WasdWidget from '../widgets/WasdWidget';
 import Card from '../ui/Card';
 import PanTiltWidget from '../widgets/PanTiltWidget';
+import ActionPanel from '../widgets/ActionPanel';
 
 
 
@@ -24,8 +25,9 @@ const Dashboard = () => {
     { i: 'main_camera', x: 0, y: 0, w: 6, h: 10 },
     { i: 'ir_camera', x: 8, y: 0, w: 6, h: 10 },
     { i: 'movement', x: 0, y: 10, w: 3, h: 5 },
+    { i: 'joystick', x: 3, y: 10, w: 2, h: 5 },
+    { i: 'actions', x: 6, y:10, w:3, h: 5 },
     { i: 'camera_controls', x: 10, y: 10, w: 3, h: 5},
-    { i: 'joystick', x: 5, y: 10, w: 2, h: 5 },
     // { i: 'telemetry', x: 8, y: 5, w: 4, h: 5 },
   
   ];
@@ -87,6 +89,13 @@ const Dashboard = () => {
           <div key="movement">
             <Card title="Keyboard Teleop">
                 <WasdWidget />
+            </Card>
+          </div>
+
+          {/* Action Panel Module */}
+          <div key="actions">
+            <Card title="Action Panel">
+              <ActionPanel />
             </Card>
           </div>
 
