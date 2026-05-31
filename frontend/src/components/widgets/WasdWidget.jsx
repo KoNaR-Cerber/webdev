@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { useRobot } from "../../context/RobotContext";
 import { useTeleopControls } from "../../hooks/useTeleopControls";
 import TeleopButton from "../ui/TeleopButton";
@@ -15,20 +15,31 @@ const WasdWidget = () => {
     
     const { activeKeys, handlePointerDown, handlePointerUp } = useTeleopControls(WASD_KEY_MAP);
 
+    const activeKeysRef = useRef(activeKeys);
+    useEffect(() => {
+        activeKeysRef.current = activeKeys;
+    }, [activeKeys]);
+
     useEffect(() => {
         if (!isConnected) return;
 
+        const intervalId = setInterval(() => {
+            
+        
         const linearX = (activeKeys.W ? 1.0 : 0.0) + (activeKeys.S ? -1.0 : 0.0);
         const linearY = (activeKeys.A ? 1.0 : 0.0) + (activeKeys.D ? -1.0 : 0.0);
         const angularZ = (activeKeys.Q ? 1.0 : 0.0) + (activeKeys.E ? -1.0 : 0.0);
 
         const twistMsg = {
             linear: { x: linearX, y: linearY, z: 0.0 },
-            angular: { x: 0.0, y: 0.0, z: angularZ },
+            angular: { x: 0.0, y: 0.0, z: angularZ }, 
         };
 
-        sendCommand("/robot/cmd_vel_server", "geometry_msgs/Twist", twistMsg);
-    }, [activeKeys, sendCommand, isConnected]);
+        sendCommand("/cmd_vel_server", "geometry_msgs/Twist", twistMsg);
+        }, 100)
+
+       return () => clearInterval(intervalId);
+    }, [sendCommand, isConnected]);
 
     const getStatusColor = () => {
         if (connectionStatus === "CONNECTED") return "#4caf50";

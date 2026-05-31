@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useRobot } from '../../context/RobotContext';
 import { useTeleopControls } from '../../hooks/useTeleopControls';
 import TeleopButton from '../ui/TeleopButton';
@@ -19,23 +19,33 @@ const PanTiltWidget = () => {
 
     const { activeKeys, handlePointerDown, handlePointerUp } = useTeleopControls(PAN_TILT_MAP);
 
+    const activeKeysRef = useRef(activeKeys);
+
+    useEffect(() => {
+        activeKeysRef.current = activeKeys;
+    }, [activeKeys]);
+
     // 1. Command Publisher Effect
     useEffect(() => {
         if (!isConnected) return;
 
-        // X corresponds to Left/Right 
-        const panX = (activeKeys.RIGHT ? 1.0 : 0.0) + (activeKeys.LEFT ? -1.0 : 0.0);
-        
-        // Y corresponds to Up/Down
-        const tiltY = (activeKeys.UP ? 1.0 : 0.0) + (activeKeys.DOWN ? -1.0 : 0.0);
+        const intervalId = setInterval(() => {
+            const keys = activeKeysRef.current;
 
-        const twistMsg = {
-            linear: { x: panX, y: tiltY, z: 0.0 },
-            angular: { x: 0.0, y: 0.0, z: 0.0 } 
-        };
+            // X corresponds to Left/Right, Y corresponds to Up/Down
+            const panX = (activeKeys.RIGHT ? 1.0 : 0.0) + (activeKeys.LEFT ? -1.0 : 0.0);
+            const tiltY = (activeKeys.UP ? 1.0 : 0.0) + (activeKeys.DOWN ? -1.0 : 0.0);
+            
+            const twistMsg = {
+                linear: { x: panX, y: tiltY, z: 0.0 },
+                angular: { x: 0.0, y: 0.0, z: 0.0 } 
+            };
 
-        sendCommand('/ptz/cmd_vel', 'geometry_msgs/Twist', twistMsg);
-    }, [activeKeys, sendCommand, isConnected]);
+            sendCommand('/ptz/cmd_vel', 'geometry_msgs/Twist', twistMsg);
+        }, 100);
+
+        return () => clearInterval(intervalId);
+    }, [sendCommand, isConnected]);
 
     // 2. Status Subscriber Effect
     useEffect(() => {
