@@ -12,7 +12,7 @@ const ActionPanel = () => {
         if(!isConnected) return;
 
         const msg ={ cmd_code: 1, size: 0, type: 1};
-        sendCommand('/robot/simple_cmd', 'transfer_interfaces/MotionSimpleCMD', msg);
+        sendCommand('/robot/simple_cmd', 'transfer_interfaces/MotionSimpleCMD', msg); // /robot/ może być niepotrzebne
     };
 
     const handleAlarmDown = () => {
