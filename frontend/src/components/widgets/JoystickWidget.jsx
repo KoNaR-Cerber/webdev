@@ -27,7 +27,7 @@ const JoystickWidget = () => {
                 angular: { x: 0.0, y: 0.0, z: turnSpeed }
             };
             
-            sendCommandRef.current('/cmd_vel_server', 'geometry_msgs/Twist', twistMsg);        }, 100),
+            sendCommandRef.current('/robot/cmd_vel_server', 'geometry_msgs/Twist', twistMsg);        }, 100),
         [] 
     );
 
@@ -36,9 +36,9 @@ const JoystickWidget = () => {
             linear: { x: 0.0, y: 0.0, z: 0.0 },
             angular: { x: 0.0, y: 0.0, z: 0.0 }
         };
-            sendCommandRef.current('/cmd_vel_server', 'geometry_msgs/Twist', stopMsg);    }, []);
+            sendCommandRef.current('/robot/cmd_vel_server', 'geometry_msgs/Twist', stopMsg);    }, []);
 
-    // SINGLE, CONSOLIDATED USE-EFFECT
+            
     useEffect(() => {
         if (!joyRef.current) return;
 
