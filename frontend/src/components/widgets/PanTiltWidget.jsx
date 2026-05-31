@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useRobot } from '../../context/RobotContext';
 import { useTeleopControls } from '../../hooks/useTeleopControls';
 import TeleopButton from '../ui/TeleopButton';
+import * as ROSLIB from 'roslib';
 
 // Map arrow keys to directional actions
 const PAN_TILT_MAP = {
