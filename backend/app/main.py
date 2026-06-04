@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import janus
 from .db.database import db_manager
 from .services.ros_service import ros_manager
-from .services.ros_queue_printer import janus_queue_printer
+from .services.test_ros_queue_printer import janus_queue_printer
 from .schemas import SubscriptionRequest
 
 
