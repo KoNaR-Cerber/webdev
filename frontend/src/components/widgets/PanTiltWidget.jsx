@@ -13,7 +13,7 @@ const PAN_TILT_MAP = {
 };
 
 const PanTiltWidget = () => {
-    const { connectionStatus, sendCommand, ros } = useRobot();
+    const { connectionStatus, sendCommand, ros, speeds } = useRobot();
     const isConnected = connectionStatus === "CONNECTED";
     
     const [ptzStatus, setPtzStatus] = useState("UNKNOWN");
@@ -34,8 +34,8 @@ const PanTiltWidget = () => {
             const keys = activeKeysRef.current;
 
             // X corresponds to Left/Right, Y corresponds to Up/Down
-            const panX = (keys.RIGHT ? 1.0 : 0.0) + (keys.LEFT ? -1.0 : 0.0);
-            const tiltY = (keys.UP ? 1.0 : 0.0) + (keys.DOWN ? -1.0 : 0.0);
+            const panX = ((keys.RIGHT ? 1.0 : 0.0) + (keys.LEFT ? -1.0 : 0.0)) * speeds.camera;
+            const tiltY = ((keys.UP ? 1.0 : 0.0) + (keys.DOWN ? -1.0 : 0.0)) * speeds.camera;
             
             const twistMsg = {
                 linear: { x: panX, y: tiltY, z: 0.0 },

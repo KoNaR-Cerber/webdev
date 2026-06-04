@@ -9,11 +9,11 @@ import 'react-resizable/css/styles.css';
 
 // imports for modules
 import WebRTCCamera from '../ui/WebRTCCamera';
-//import JoystickWidget from '../widgets/JoystickWidget';
 import WasdWidget from '../widgets/WasdWidget';
 import Card from '../ui/Card';
 import PanTiltWidget from '../widgets/PanTiltWidget';
 import ActionPanel from '../widgets/ActionPanel';
+import SpeedSlidersWidget from '../widgets/SpeedSlidersWidget';
 
 
 
@@ -24,10 +24,10 @@ const Dashboard = () => {
   const layout = [
     { i: 'main_camera', x: 0, y: 0, w: 6, h: 10 },
     { i: 'ir_camera', x: 8, y: 0, w: 6, h: 10 },
-    { i: 'movement', x: 0, y: 10, w: 3, h: 5 },
-    //{ i: 'joystick', x: 3, y: 10, w: 2, h: 5 },
-    { i: 'actions', x: 6, y:10, w:3, h: 5 },
-    { i: 'camera_controls', x: 10, y: 10, w: 3, h: 5},
+    { i: 'movement', x: 0, y: 10, w: 2, h: 6 },
+    { i: 'camera_controls', x: 2, y: 10, w: 2, h: 6},
+    { i: 'actions', x: 4, y: 10, w: 2, h: 6 },
+    { i: 'speeds', x: 8, y: 10, w: 4, h: 8 },
     // { i: 'telemetry', x: 8, y: 5, w: 4, h: 5 },
   
   ];
@@ -45,7 +45,7 @@ const Dashboard = () => {
           gridConfig={{
             cols: 12,
             rowHeight: 30,
-            margin: [16, 16],
+            margin: [10, 10],
           }}
           dragConfig={{
             enable: true,
@@ -70,13 +70,12 @@ const Dashboard = () => {
                   streamPath="video/IR_cam" 
               />
           </div>
-
-          {/* Joystick Module
-          <div key="joystick">
-            <Card title="Robot Control">
-              <JoystickWidget />
+          {/* Speeds module */}
+          <div key="speeds">
+            <Card title="Speed Controls">
+              <SpeedSlidersWidget />
             </Card>
-          </div> */}
+          </div> 
 
           {/* Camera Controls Module */}
           <div key="camera_controls">

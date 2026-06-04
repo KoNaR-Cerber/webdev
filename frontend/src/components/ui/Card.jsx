@@ -1,5 +1,5 @@
 //   
-//  This is the function for the different widget cards
+//  This is the element for the different widget cards
 // 
 import React from 'react';
 
@@ -42,7 +42,7 @@ const headerStyle = {
 const contentStyle = {
     flex: 1,
     position: 'relative',
-    padding: '8px', // Optional padding for the inside of your widgets
+    padding: '8px', 
     overflow: 'hidden',
 };
 
