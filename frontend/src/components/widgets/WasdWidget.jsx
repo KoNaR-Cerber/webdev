@@ -10,7 +10,7 @@ const WASD_KEY_MAP = {
 };
 
 const WasdWidget = () => {
-    const { connectionStatus, sendCommand } = useRobot();
+    const { connectionStatus, sendCommand, speeds } = useRobot();
     const isConnected = connectionStatus === "CONNECTED";
     
     const { activeKeys, handlePointerDown, handlePointerUp } = useTeleopControls(WASD_KEY_MAP);
@@ -26,9 +26,9 @@ const WasdWidget = () => {
         const intervalId = setInterval(() => {
 		const keys = activeKeysRef.current;
         
-		const linearX = (keys.W ? 1.0 : 0.0) + (keys.S ? -1.0 : 0.0);
-		const linearY = (keys.A ? -1.0 : 0.0) + (keys.D ? 1.0 : 0.0);
-		const angularZ = (keys.Q ? 1.0 : 0.0) + (keys.E ? -1.0 : 0.0);
+		const linearX = ((keys.W ? 1.0 : 0.0) + (keys.S ? -1.0 : 0.0)) * speeds.dogX;
+		const linearY = ((keys.A ? -1.0 : 0.0) + (keys.D ? 1.0 : 0.0)) * speeds.dogY;
+		const angularZ = ((keys.Q ? 1.0 : 0.0) + (keys.E ? -1.0 : 0.0)) * speeds.dogZ;
 
 		const twistMsg = {
 		    linear: { x: linearX, y: linearY, z: 0.0 },

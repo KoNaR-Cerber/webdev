@@ -12,6 +12,13 @@ const RobotContext = createContext();
 
 export const RobotProvider = ({ children }) => {
   const [ros, setRos] = useState(null);
+  // Speed states used by the SpeedSlidersWidget to pass to the movement commands
+  const [speeds, setSpeeds ] = useState({
+    dogX: 1.0,
+    dogY: 1.0,
+    dogZ: 1.0,
+    camera: 0.5
+  });
   const [telemetry, setTelemetry] = useState({ imu: null, battery: 100 });
   const [connectionStatus, setConnectionStatus] = useState("CONNECTING");
   // We use a ref to cache our ROS topic objects so we don't recreate them on every render
@@ -89,7 +96,7 @@ export const RobotProvider = ({ children }) => {
   );
 
   return (
-    <RobotContext.Provider value={{ ros, connectionStatus, telemetry, sendCommand }}>
+    <RobotContext.Provider value={{ ros, speeds, setSpeeds, connectionStatus, telemetry, sendCommand }}>
       {children}
     </RobotContext.Provider>
   );

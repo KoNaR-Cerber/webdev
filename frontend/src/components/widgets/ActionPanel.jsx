@@ -49,7 +49,7 @@ const ActionPanel = () => {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '16px', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '4px', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             
             <button 
                 style={{ 

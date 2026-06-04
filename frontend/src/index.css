@@ -3,11 +3,68 @@ html, body, #root {
   padding: 0;
   width: 100%;
   min-height: 100vh;
-  background-color: #111; 
   overflow-x: hidden;
 }
 
-/* Ensure box sizing is predictable across all elements */
+/* Ensure box sizing is predictable across all elements  */
 *, *::before, *::after {
   box-sizing: border-box;
+}
+
+:root {
+  
+  /* Main background colour */
+  --bg-main: #121212;
+  /* Widget background colour */
+  --bg-panel: #2a2a2a;
+  /* Inactive button background colour */
+  --bg-btn-inactive: #444444;
+  
+  /* Text colours */
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
+
+  /* Action colours */
+  --accent-blue: rgb(69, 158, 231);
+  --accent-red: #f44336;
+  --accent-green: #4caf50;
+  --accent-orange: #ff9800;
+
+  /* Shadows */
+  --shadow-normal: 0 4px 6px rgba(0,0,0,0.3);
+  --shadow-pressed: 0 3px 5px rgba(0,0,0,0.5);
+}
+
+/* Light theme CSS */
+[data-theme='light'] {
+  --bg-main: #f0f2f5;
+  --bg-panel: #ffffff;
+  --bg-btn-inactive: #e0e0e0;
+  
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --accent-blue: #0a71df
+  
+  --shadow-normal: 0 2px 4px rgba(0,0,0,0.1);
+  --shadow-pressed: inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  margin: 0;
+  font-family: sans-serif;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.widget-container {
+  background-color: var(--bg-panel);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  transition: background-color 0.3s, color 0.3s;
 }
