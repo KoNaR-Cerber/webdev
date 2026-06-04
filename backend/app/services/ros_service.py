@@ -1,144 +1,312 @@
-import roslibpy
-import time
+import multiprocessing
+import threading
+import asyncio
 import janus
 import os
+import time
+from typing import Optional
+
+import roslibpy
 
 __host__ = os.getenv("ROSBRIDGE_HOST", "localhost")
 
 
+def _ros_process_main(
+    host: str,
+    port: int,
+    subscriptions: dict,
+    control_queue: multiprocessing.Queue,
+    out_queue: multiprocessing.Queue,
+):
+    """
+    Child process main:
+    - runs the roslibpy Ros reactor in the child process main thread (so Twisted can install signals)
+    - spawns a control thread that listens for subscribe/unsubscribe/exit commands from main via control_queue
+    - spawns a status thread that watches ros.is_connected and forwards status changes via out_queue
+    - when messages arrive, forwards ("msg", topic, message) via out_queue
+    """
+    ros = roslibpy.Ros(host=host, port=port)
+    topics = {}
+    try:
+
+        def make_cb(tname):
+            def _cb(message):
+                try:
+                    out_queue.put(("msg", tname, message))
+                except Exception:
+                    pass
+
+            return _cb
+
+        # create initial subscriptions snapshot in main thread before reactor run
+        for tname, mtype in (subscriptions or {}).items():
+            try:
+                topic = roslibpy.Topic(ros, tname, mtype, reconnect_on_close=True)
+                topic.subscribe(make_cb(tname))
+                topics[tname] = topic
+            except Exception as e:
+                print(f"⚠️ child subscribe initial {tname}: {e}")
+
+        # control thread: blocks on control_queue.get() and handles commands
+        def control_loop():
+            while True:
+                try:
+                    cmd = control_queue.get()
+                except Exception:
+                    break
+                if cmd is None:
+                    break
+                try:
+                    action = cmd[0]
+                    if action == "exit":
+                        break
+                    if action == "subscribe":
+                        _, tname, mtype = cmd
+                        if tname in topics:
+                            continue
+                        try:
+                            topic = roslibpy.Topic(
+                                ros, tname, mtype, reconnect_on_close=True
+                            )
+                            topic.subscribe(make_cb(tname))
+                            topics[tname] = topic
+                            out_queue.put(("control_ack", "subscribed", tname))
+                        except Exception as e:
+                            out_queue.put(("control_err", "subscribe", tname, str(e)))
+                    elif action == "unsubscribe":
+                        _, tname = cmd
+                        if tname in topics:
+                            try:
+                                topics[tname].unsubscribe()
+                            except Exception:
+                                pass
+                            del topics[tname]
+                            out_queue.put(("control_ack", "unsubscribed", tname))
+                    elif action == "list":
+                        out_queue.put(("control_reply", "list", list(topics.keys())))
+                except Exception:
+                    pass
+
+        # status thread: watch ros.is_connected and forward changes
+        def status_loop():
+            prev = None
+            while True:
+                try:
+                    if not ros:
+                        break
+                    connected = bool(getattr(ros, "is_connected", False))
+                    if connected != prev:
+                        prev = connected
+                        try:
+                            out_queue.put(("status", "connected", connected))
+                        except Exception:
+                            pass
+                    time.sleep(0.5)
+                except Exception:
+                    break
+
+        ctrl_thread = threading.Thread(target=control_loop, daemon=True)
+        ctrl_thread.start()
+        status_thread = threading.Thread(target=status_loop, daemon=True)
+        status_thread.start()
+
+        # run reactor in this process' main thread (allowed to install signals)
+        try:
+            ros.run_forever()
+        except Exception as e:
+            print("❌ ROS process run_forever ended:", e)
+    except Exception as exc:
+        print("❌ ROS child process error:", exc)
+    finally:
+        # cleanup
+        try:
+            for t in list(topics.values()):
+                try:
+                    t.unsubscribe()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            ros.terminate()
+        except Exception:
+            pass
+
+
 class RosManager:
     """
-    Manages the connection to the ROS bridge server.
-    By default, it connects to a ROS bridge server running on Wireguard.
-        Responsibilities:
-        - Establishes and maintains the connection to the ROS bridge server.
-        - Provides methods to subscribe to ROS topics and handle incoming messages.
-        - Ensures that incoming messages are safely enqueued for asynchronous processing.
+    Process-backed Ros manager.
+    - start_ros_process() launches a child process that holds the Ros client + topics.
+    - dynamic subscribe/unsubscribe is supported via a control_queue IPC.
+    - connection status is forwarded from child and exposed via .is_connected.
+    - messages from child are forwarded into janus queue in the main process.
     """
 
-    def __init__(self, port=9090):
+    def __init__(self, port: int = 9090):
         self.host = __host__
         self.port = port
-        self.ros_client = None
-        self.active_topics: dict[str, roslibpy.Topic] = {}
-        self.desired_subscriptions: dict[str, str] = {}  # topic_name -> message_type
-        self.queue: janus.Queue | None = None
-        self._is_connected_fallback = False
 
+        # Local bookkeeping (main process)
+        self.desired_subscriptions: dict[str, str] = {}
+        self.queue: Optional[janus.Queue] = None
+
+        # Child process handles
+        self._ros_proc: Optional[multiprocessing.Process] = None
+        self._proc_control_queue: Optional[multiprocessing.Queue] = None
+        self._proc_out_queue: Optional[multiprocessing.Queue] = None
+        self._proc_forward_task: Optional[asyncio.Task] = None
+
+        # state forwarded from child
+        self._child_connected: bool = False
 
     @property
     def is_connected(self) -> bool:
-        """Check if the ROS client is currently connected."""
-        if self.ros_client:
-            return bool(self.ros_client.is_connected or self.ros_client.is_connected_fallback)
-        return False
+        """Return connection state as reported by the child process."""
+        return self._child_connected
 
-
-    def connect(self):
-        """Connect to the ROS bridge server."""
-        if self.is_connected:
-            print("⚠️ Already connected to ROS bridge.")
-            return True
-        print(f"🚀 Connecting to ROS bridge at {self.host}:{self.port}...")
-        try:
-            if self.ros_client is None:
-                self.ros_client = roslibpy.Ros(host=self.host, port=self.port)
-                # --- Define the callbacks normally ---
-                def on_connect():
-                    print("✅ ROS Event: Connected to ROS bridge!")
-                    self._is_connected_fallback = True
-                    self._resubscribe_all()
-
-                def on_close(*args):
-                    print("🔌 ROS Event: Connection closed.")
-                    self._is_connected_fallback = False
-
-                def on_error(error):
-                    print(f"❌ ROS Event Error: {error}")
-                    self._is_connected_fallback = False
-
-                # --- Correctly register them as arguments ---
-                self.ros_client.on('connection', on_connect)
-                self.ros_client.on('close', on_close)
-                self.ros_client.on('error', on_error)
-                # --------------------------------------
-                self.ros_client.run()
-            else:
-                self.ros_client.connect()
-            for _ in range(20):
-                if self.is_connected:
-                    break
-                time.sleep(0.1)
-            if self.ros_client.is_connected:
-                print("✅ Successfully connected to ROS bridge.")
-                self._resubscribe_all()
-                return True
-            else:
-                print("❌ Failed to connect to ROS bridge.")
-                return False
-        except Exception as e:
-            print(f"❌ Error connecting to ROS bridge: {e}")
-            self._is_connected_fallback = False
-            return False
-
-    def disconnect(self):
-        """Disconnect from the ROS bridge server and clean up resources."""
-        for topic in self.active_topics.values():
-            topic.unsubscribe()
-        self.active_topics.clear()
-        if self.ros_client:
-            self.ros_client.close()
-
-        self._is_connected_fallback = False
-        print("🔌 Disconnected from ROS bridge.")
-
-    def subscribe(self, topic_name: str, message_type: str) -> bool:
-        """Registers a new topic and binds it to the shared queue."""
-        if topic_name in self.desired_subscriptions:
-            return False  # Already subscribed
-        self.desired_subscriptions[topic_name] = message_type
-        if self.is_connected:
-            self._create_subscription(topic_name, message_type)
-        else:
-            print(f"⚠️ Queued subscription to {topic_name} - not connected to ROS bridge.")
-        return True
-    def terminate(self):
-        """Hard shutdown: kills the background reactor thread."""
-        self.disconnect()
-        if self.ros_client:
-            self.ros_client.terminate()  # Only call this when the FastAPI app is dying
-            self.ros_client = None
-
-        self._is_connected_fallback = False
-        print("🛑 ROS bridge connection completely terminated.")
-    def _resubscribe_all(self):
-        """Resubscribe to all desired topics after reconnecting."""
-        self.active_topics.clear()  # Clear existing subscriptions
-        for topic_name, message_type in self.desired_subscriptions.items():
-            self._create_subscription(topic_name, message_type)
-
-    def _create_subscription(self, topic_name: str, message_type: str):
-        if topic_name in self.active_topics:
-            return  # Already subscribed
-        if not self.ros_client:
+    def start_ros_process(self):
+        """Start child process and forward its messages into janus queue."""
+        if getattr(self, "_ros_proc", None) and self._ros_proc.is_alive():
             return
 
-        topic = roslibpy.Topic(self.ros_client, topic_name, message_type)
+        self._proc_control_queue = multiprocessing.Queue()
+        self._proc_out_queue = multiprocessing.Queue()
 
-        def callback(message):
+        subs_snapshot = dict(self.desired_subscriptions)
+
+        self._ros_proc = multiprocessing.Process(
+            target=_ros_process_main,
+            args=(
+                self.host,
+                self.port,
+                subs_snapshot,
+                self._proc_control_queue,
+                self._proc_out_queue,
+            ),
+            daemon=True,
+        )
+        self._ros_proc.start()
+
+        # start asyncio forwarder that moves messages from proc_out_queue -> janus queue
+        # ensure forwarder sees a stable local reference to the queue
+        self._proc_forward_task = asyncio.create_task(self._proc_queue_forwarder())
+
+    async def _proc_queue_forwarder(self):
+        """Async task that moves items from multiprocessing.Queue into the janus queue (and updates state)."""
+        loop = asyncio.get_running_loop()
+        # capture local reference to avoid None checks on self in loop
+        out_q = self._proc_out_queue
+        if out_q is None:
+            # nothing to forward
+            return
+
+        try:
+            while True:
+                # blocking get in threadpool using the concrete out_q
+                try:
+                    item = await loop.run_in_executor(None, out_q.get)
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    # if get fails for some reason, stop forwarder
+                    break
+
+                if item is None:
+                    break
+                try:
+                    kind = item[0]
+                    if kind == "msg":
+                        _, topic, message = item
+                        if self.queue is not None:
+                            try:
+                                self.queue.sync_q.put_nowait(("ros", topic, message))
+                            except Exception:
+                                pass
+                    elif kind == "status":
+                        _, key, val = item
+                        if key == "connected":
+                            self._child_connected = bool(val)
+                            print(f"🔁 child connected={self._child_connected}")
+                    elif kind == "control_ack":
+                        # optional: print acknowledgements
+                        _, action, tname = item
+                        print(f"🔔 child ack {action} {tname}")
+                    elif kind == "control_err":
+                        _, action, tname, err = item
+                        print(f"⚠️ child control err {action} {tname}: {err}")
+                    elif kind == "control_reply":
+                        # ignore or handle
+                        pass
+                except Exception:
+                    pass
+        finally:
+            # best-effort: avoid leaving dangling references
+            return
+
+    def stop_ros_process(self):
+        """Stop child process and forwarder task."""
+        try:
+            if getattr(self, "_proc_control_queue", None):
+                try:
+                    # ask child to exit cleanly
+                    self._proc_control_queue.put_nowait(("exit",))
+                except Exception:
+                    pass
+            if getattr(self, "_proc_out_queue", None):
+                try:
+                    # wake forwarder so it can exit
+                    self._proc_out_queue.put_nowait(None)
+                except Exception:
+                    pass
+            if getattr(self, "_ros_proc", None):
+                self._ros_proc.terminate()
+                self._ros_proc.join(timeout=2.0)
+        finally:
+            if getattr(self, "_proc_forward_task", None):
+                self._proc_forward_task.cancel()
+
+    def subscribe(self, topic_name: str, message_type: str) -> bool:
+        """
+        Request a subscription. If child process is running, send control message.
+        Otherwise record desired_subscriptions so the child will create topics at start.
+        """
+        if topic_name in self.desired_subscriptions:
+            return False
+        self.desired_subscriptions[topic_name] = message_type
+        if (
+            getattr(self, "_proc_control_queue", None)
+            and getattr(self, "_ros_proc", None)
+            and self._ros_proc.is_alive()
+        ):
             try:
-                if self.queue:
-                    payload = {
-                        "topic": topic_name,
-                        "data": message,
-                    }
-                    self.queue.sync_q.put(payload)
-            except Exception as e:
-                print(f"❌ Error enqueuing message from {topic_name}: {e}")
+                self._proc_control_queue.put_nowait(
+                    ("subscribe", topic_name, message_type)
+                )
+            except Exception:
+                pass
+        else:
+            print(f"⚠️ Queued subscription to {topic_name} (process not running yet)")
+        return True
 
-        topic.subscribe(callback)
-        self.active_topics[topic_name] = topic
-        print(f"✅ Subscribed to topic: {topic_name} with type: {message_type}")
+    def unsubscribe(self, topic_name: str) -> bool:
+        """Request unsubscribe in child and remove desired_subscriptions."""
+        if topic_name not in self.desired_subscriptions:
+            return False
+        del self.desired_subscriptions[topic_name]
+        if (
+            getattr(self, "_proc_control_queue", None)
+            and getattr(self, "_ros_proc", None)
+            and self._ros_proc.is_alive()
+        ):
+            try:
+                self._proc_control_queue.put_nowait(("unsubscribe", topic_name))
+            except Exception:
+                pass
+        return True
+
+    def terminate(self):
+        """Shutdown helper for app exit."""
+        self.stop_ros_process()
 
 
 ros_manager = RosManager()

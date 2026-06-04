@@ -5,32 +5,27 @@ from contextlib import asynccontextmanager
 import janus
 from .db.database import db_manager
 from .services.ros_service import ros_manager
-from .workers.db_workers import influxdb_queue_worker
+from .services.ros_queue_printer import janus_queue_printer
 from .schemas import SubscriptionRequest
 
 
 tasks = {}
 
 
-async def ros_connection_monitor():
-    while True:
-        if not ros_manager.is_connected:
-            await asyncio.to_thread(ros_manager.connect)
-        await asyncio.sleep(15)
-
-
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_: FastAPI):
     await db_manager.connect()
     queue = janus.Queue(maxsize=100000)
-    tasks["queue_worker"] = asyncio.create_task(influxdb_queue_worker(queue))
+    # tasks["queue_worker"] = asyncio.create_task(influxdb_queue_worker(queue))
     print(
         f"🚀 Starting ROS bridge connection to {ros_manager.host}:{ros_manager.port}..."
     )
     ros_manager.queue = queue
-    tasks["ros_monitor"] = asyncio.create_task(ros_connection_monitor())
+    ros_manager.start_ros_process()
+    ros_manager.subscribe("/test_topic","std_msgs/String")
+    tasks["queue_worker"] = asyncio.create_task(janus_queue_printer(queue))
     yield
-    ros_manager.terminate()
+    ros_manager.stop_ros_process()
     for task in ["ros_monitor", "queue_worker"]:
         if task in tasks:
             tasks[task].cancel()
@@ -51,7 +46,6 @@ async def health_check():
 async def list_topics():
     return {
         "connected_to_rosbridge": ros_manager.is_connected,
-        "active_topics": list(ros_manager.active_topics.keys()),
         "queued_subscriptions": list(ros_manager.desired_subscriptions.keys()),
     }
 
