@@ -32,7 +32,7 @@ rebuild-frontend:
 	@echo "Stopping nginx and frontend services..."
 	docker compose rm -fs nginx frontend
 	@echo "Removing named volume for frontend build cache..."
-	docker volume rm -f cerber-project_frontend_dist || true
+	docker volume rm -f cerber-project_frontend-dist || true
 	@echo "Rebuilding frontend and restarting nginx..."
 	docker compose up -d --build nginx frontend
 	@echo "Done!"
