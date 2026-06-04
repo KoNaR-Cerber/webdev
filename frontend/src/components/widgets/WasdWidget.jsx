@@ -27,7 +27,7 @@ const WasdWidget = () => {
 		const keys = activeKeysRef.current;
         
 		const linearX = (keys.W ? 1.0 : 0.0) + (keys.S ? -1.0 : 0.0);
-		const linearY = (keys.A ? 1.0 : 0.0) + (keys.D ? -1.0 : 0.0);
+		const linearY = (keys.A ? -1.0 : 0.0) + (keys.D ? 1.0 : 0.0);
 		const angularZ = (keys.Q ? 1.0 : 0.0) + (keys.E ? -1.0 : 0.0);
 
 		const twistMsg = {

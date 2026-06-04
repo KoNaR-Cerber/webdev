@@ -9,7 +9,7 @@ import 'react-resizable/css/styles.css';
 
 // imports for modules
 import WebRTCCamera from '../ui/WebRTCCamera';
-import JoystickWidget from '../widgets/JoystickWidget';
+//import JoystickWidget from '../widgets/JoystickWidget';
 import WasdWidget from '../widgets/WasdWidget';
 import Card from '../ui/Card';
 import PanTiltWidget from '../widgets/PanTiltWidget';
@@ -25,7 +25,7 @@ const Dashboard = () => {
     { i: 'main_camera', x: 0, y: 0, w: 6, h: 10 },
     { i: 'ir_camera', x: 8, y: 0, w: 6, h: 10 },
     { i: 'movement', x: 0, y: 10, w: 3, h: 5 },
-    { i: 'joystick', x: 3, y: 10, w: 2, h: 5 },
+    //{ i: 'joystick', x: 3, y: 10, w: 2, h: 5 },
     { i: 'actions', x: 6, y:10, w:3, h: 5 },
     { i: 'camera_controls', x: 10, y: 10, w: 3, h: 5},
     // { i: 'telemetry', x: 8, y: 5, w: 4, h: 5 },
@@ -71,12 +71,12 @@ const Dashboard = () => {
               />
           </div>
 
-          {/* Joystick Module */}
+          {/* Joystick Module
           <div key="joystick">
             <Card title="Robot Control">
               <JoystickWidget />
             </Card>
-          </div>
+          </div> */}
 
           {/* Camera Controls Module */}
           <div key="camera_controls">
