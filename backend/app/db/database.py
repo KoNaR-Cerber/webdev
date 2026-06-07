@@ -14,6 +14,10 @@ class InfluxDBManager:
         """Initialize the InfluxDB client asynchronously."""
         self.client = InfluxDBClientAsync.from_env_properties()
         self.write_api = self.client.write_api()
+    @property
+    def is_connected(self) -> bool:
+        """Check if the InfluxDB client is connected."""
+        return self.client is not None
     async def close(self):
         """Close the InfluxDB client connection."""
         if self.client:
