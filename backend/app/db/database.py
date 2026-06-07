@@ -34,7 +34,7 @@ class InfluxDBManager:
             if not has_fields:
                 print(f"Skipping telemetry write for topic '{topic_name}': no supported fields found")
                 return
-
+            print(f"Writing telemetry data for topic '{topic_name}': {ros_message}")
             await self.write_api.write(bucket=INFLUXDB_BUCKET, record=point)
         except Exception as e:
             print(f"Error writing telemetry data: {e}")
