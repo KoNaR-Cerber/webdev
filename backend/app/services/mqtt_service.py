@@ -13,6 +13,14 @@ class MQTTManager:
         self._task = None
         self.subscriptions = {}  # topic -> message_type
 
+    @property
+    def is_connected(self) -> bool:
+        return (
+            self.client is not None
+            and self.client._client is not None
+            and self.client._client.is_connected()
+        )
+
     async def start(self):
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._message_loop())
