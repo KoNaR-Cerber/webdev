@@ -5,8 +5,9 @@ from contextlib import asynccontextmanager
 import janus
 from .db.database import db_manager
 from .services.ros_service import ros_manager
+from .services.mqtt_service import mqtt_manager
 from .services.test_ros_queue_printer import janus_queue_printer
-from .schemas import SubscriptionRequest
+from .schemas import RosSubscriptionRequest, MQTTSubscriptionRequest
 
 
 tasks = {}
@@ -22,11 +23,17 @@ async def lifespan(_: FastAPI):
     )
     ros_manager.queue = queue
     ros_manager.start_ros_process()
-    ros_manager.subscribe("/test_topic","std_msgs/String")
+    ros_manager.subscribe("/test_topic", "std_msgs/String")
+
+    print("🚀 Starting MQTT connection...")
+    mqtt_manager.queue = queue
+    await mqtt_manager.start()
+    mqtt_manager.add_subscription("test/mqtt/topic")
     tasks["queue_worker"] = asyncio.create_task(janus_queue_printer(queue))
     yield
+    await mqtt_manager.stop()
     ros_manager.stop_ros_process()
-    for task in ["ros_monitor", "queue_worker"]:
+    for task in ["queue_worker"]:
         if task in tasks:
             tasks[task].cancel()
 
@@ -49,9 +56,18 @@ async def list_topics():
         "queued_subscriptions": list(ros_manager.desired_subscriptions.keys()),
     }
 
+@app.post("/api/v1/mqtt/subscribe", status_code=status.HTTP_200_OK)
+async def subscribe_to_mqtt_topic(topic: MQTTSubscriptionRequest):
+    if topic.topic.startswith("/"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="MQTT topic name must start without '/'",
+        )
+    mqtt_manager.add_subscription(topic.topic)
+    return {"message": f"Subscribed to MQTT topic: {topic.topic}"}
 
-@app.post("/api/v1/subscribe", status_code=status.HTTP_200_OK)
-async def subscribe_topic(req: SubscriptionRequest):
+@app.post("/api/v1/ros/subscribe", status_code=status.HTTP_200_OK)
+async def subscribe_topic(req: RosSubscriptionRequest):
     if not req.topic.startswith("/"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -69,13 +85,3 @@ async def subscribe_topic(req: SubscriptionRequest):
     return {
         "message": f"{connection_status} to topic: {req.topic} with type: {req.message_type}"
     }
-
-
-# async def mqtt_subscriber():
-#     try:
-#         async with aiomqtt.Client("localhost", 1883) as client:
-#             await client.subscribe("test/topic")
-#             async for message in client.messages:
-#                 print(f"Received message: {message.payload.decode()}")
-#     except Exception as e:
-#         print(f"MQTT subscriber error: {e}")
