@@ -52,6 +52,7 @@ services:
     network_mode: "service:wireguard"
     environment:
       - GRAFANA_DASHBOARD_TOKEN=${GRAFANA_DASHBOARD_TOKEN}
+      - NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx
     volumes:
       - ./server/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
       - ./server/certs:/etc/nginx/certs:ro
