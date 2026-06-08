@@ -50,8 +50,10 @@ services:
     image: nginx:latest
     container_name: nginx-router
     network_mode: "service:wireguard"
+    environment:
+      - GRAFANA_DASHBOARD_TOKEN=${GRAFANA_DASHBOARD_TOKEN}
     volumes:
-      - ./server/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./server/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
       - ./server/certs:/etc/nginx/certs:ro
       - frontend-dist:/usr/share/nginx/html:ro
     depends_on:
