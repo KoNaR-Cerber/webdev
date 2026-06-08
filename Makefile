@@ -44,5 +44,13 @@ rebuild-backend:
 	@echo "Rebuilding backend and restarting server..."
 	docker compose up -d --build backend
 	@echo "Done!"
-
+rebuild-dashboards:
+	@echo "Rebuilding dashes..."
+	@echo "Stopping related services..."
+	docker compose rm -fs wireguard-exporter prometheus grafana
+	@echo "Removing named volumes for prometheus & grafana..."
+	docker volume rm -f cerber-project_grafana-data cerber-project_prometheus-data
+	@echo "Restarting services..."
+	docker compose up -d --force-recreate wireguard-exporter prometheus grafana
+	@echo "Done!"
 
