@@ -100,5 +100,43 @@ services:
       - wireguard
     restart: always
 
+  wireguard-exporter:
+    image: mindflavor/prometheus-wireguard-exporter:latest
+    container_name: wireguard-exporter
+    cap_add:
+      - NET_ADMIN
+    network_mode: "service:wireguard" 
+    volumes:
+      - ./server/wg-config/templates:/etc/wireguard:ro
+    depends_on:
+      - wireguard
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    network_mode: "service:wireguard"
+    volumes:
+      - ./server/prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    depends_on:
+      - wireguard
+      - wireguard-exporter
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    network_mode: "service:wireguard"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 volumes:
   frontend-dist:
+  prometheus-data:
+  grafana-data:
