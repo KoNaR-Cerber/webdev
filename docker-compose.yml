@@ -15,6 +15,7 @@ services:
       - ./server/wg-config:/config
     ports:
       - "51820:51820/udp" # WireGuard VPN port
+      # - "3001:3001" # Grafana HTTP Port
       #- "80:80" # Nginx HTTP port
       #- "443:443" # Nginx HTTPS port
       #- "8890:8890/udp" # SRT port (Mediamtx)
@@ -103,11 +104,13 @@ services:
   wireguard-exporter:
     image: mindflavor/prometheus-wireguard-exporter:latest
     container_name: wireguard-exporter
+    user: "root"
     cap_add:
       - NET_ADMIN
     network_mode: "service:wireguard" 
     volumes:
-      - ./server/wg-config/templates:/etc/wireguard:ro
+      - ./server/wg-config/wg_confs:/etc/wireguard:ro
+    command: ["--prepend_sudo", "false"]
     depends_on:
       - wireguard
     restart: unless-stopped
@@ -130,6 +133,7 @@ services:
     network_mode: "service:wireguard"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SERVER_HTTP_PORT=3001
     volumes:
       - grafana-data:/var/lib/grafana
     depends_on:
