@@ -14,6 +14,7 @@ import Card from '../ui/Card';
 import PanTiltWidget from '../widgets/PanTiltWidget';
 import ActionPanel from '../widgets/ActionPanel';
 import SpeedSlidersWidget from '../widgets/SpeedSlidersWidget';
+import GpsWidget from '../widgets/GpsWidget';
 
 
 
@@ -28,6 +29,7 @@ const Dashboard = () => {
     { i: 'camera_controls', x: 2, y: 10, w: 2, h: 6},
     { i: 'actions', x: 4, y: 10, w: 2, h: 6 },
     { i: 'speeds', x: 8, y: 10, w: 4, h: 8 },
+    { i: 'gps', x: 6, y: 10, w: 2, h: 6},
     // { i: 'telemetry', x: 8, y: 5, w: 4, h: 5 },
   
   ];
@@ -74,6 +76,13 @@ const Dashboard = () => {
           <div key="speeds">
             <Card title="Speed Controls">
               <SpeedSlidersWidget />
+            </Card>
+          </div> 
+
+           {/* Speeds module */}
+          <div key="gps">
+            <Card title="GPS Location">
+              <GpsWidget />
             </Card>
           </div> 
 

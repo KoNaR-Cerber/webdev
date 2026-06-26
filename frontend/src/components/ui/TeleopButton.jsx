@@ -7,15 +7,18 @@ const TeleopButton = ({
     isConnected,
     onPointerDown,
     onPointerUp,
-    activeColor = '#2196f3'
+    activeColor = '#2196f3',
+    inactiveColor = '#444',
+    customStyle = {}
 }) => {
     const connected = isConnected !== undefined ? isConnected : true;
 
     const style = {
         width: '40px',
         height: '40px',
-        background: !connected ? '#2a2a2a' : isActive ? activeColor : '#444',
-        color: connected ? (isActive ? 'white' : '#ccc') : '#555',
+        background: (isActive && connected) ? activeColor : inactiveColor,
+        color: (isActive && connected) ? 'white' : '#ccc',
+        opacity: connected ? 1 : 0.5,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -29,7 +32,8 @@ const TeleopButton = ({
             : '0 4px 6px rgba(0,0,0,0.3)',
         transform: isActive && connected ? 'translateY(2px)' : 'none',
         userSelect: 'none',
-        touchAction: 'none'
+        touchAction: 'none',
+        ...customStyle
     };
 
     return (

@@ -1,4 +1,6 @@
 .env
+postman
+.postman
 /backend/app/__pycache__
 /server/influxdb/config/influx-configs
 /server/influxdb/data

@@ -1,83 +1,84 @@
 // Stand up, sit down and etc
-import React, { useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRobot } from "../../context/RobotContext";
+import { useTeleopControls } from "../../hooks/useTeleopControls";
+import TeleopButton from "../ui/TeleopButton";
+
+const ACTION_KEY_MAP = {
+    'Z': 'SIT_STAND',
+    ' ': 'ALARM'
+};
 
 const ActionPanel = () => {
     const { connectionStatus, sendCommand } = useRobot();
     const isConnected = connectionStatus === "CONNECTED";
 
-    const [isAlarmActive, setIsAlarmActive] = useState(false)
+    const { activeKeys, handlePointerDown, handlePointerUp } = useTeleopControls(ACTION_KEY_MAP);
 
-    const handleSitStand = () => {
-        if(!isConnected) return;
+    const prevSitStand = useRef(false);
+    const prevAlarm = useRef(false);
 
-        const msg ={ cmd_code: 1, size: 0, type: 1};
-        sendCommand('/robot/simple_cmd', 'transfer_interfaces/MotionSimpleCMD', msg); // /robot/ może być niepotrzebne
-    };
+    // logic for sit/stand command
+    useEffect(() => {
+        if (activeKeys.SIT_STAND && !prevSitStand.current) {
+            if (isConnected) {
+                sendCommand('/robot/simple_cmd', 'transfer_interfaces/MotionSimpleCMD', { cmd_code: 1, size: 0, type: 1 });
+            }
+        }
+        prevSitStand.current = !!activeKeys.SIT_STAND;
+    }, [activeKeys.SIT_STAND, isConnected, sendCommand]);
 
-    const handleAlarmDown = () => {
-        if(!isConnected) return;
-        setIsAlarmActive(true);
-
-        sendCommand('/alarm/turn_on', 'std_msgs/Bool', {data: true});
-    };
-
-    const handleAlarmUp = () => {
-        if(!isConnected) return;
-        setIsAlarmActive(false);
-
-        sendCommand('/alarm/turn_on', 'std_msgs/Bool', {data: false});
-    }
-
-    const baseBtnStyle = {
-        padding: '16px 24px',
-        fontSize: '16px',
-        fontWeight: 'bold',
-        color: 'white',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: isConnected ? 'pointer' : 'not-allowed',
-        opacity: isConnected ? 1 : 0.5,
-        userSelect: 'none',
-        touchAction: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+    useEffect(() => {
+        if (!!activeKeys.ALARM !== prevAlarm.current) {
+            if (isConnected) {
+                sendCommand('/alarm/turn_on', 'std_msgs/Bool', { data: !!activeKeys.ALARM });
+            }
+            prevAlarm.current = !!activeKeys.ALARM;
+        }
+    }, [activeKeys.ALARM, isConnected, sendCommand]);
+    const panelBtnStyle = {
         width: '100%',
         maxWidth: '200px',
-        transition: 'transform 0.1s, background-color 0.1s',
+        height: 'auto',
+        padding: '16px 24px',
+        fontSize: '16px',
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '4px', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-            
-            <button 
-                style={{ 
-                    ...baseBtnStyle, 
-                    background: '#2196f3',
-                    boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                }}
-                onClick={handleSitStand}
-                disabled={!isConnected}
-            >
-                Sit / Stand Up
-            </button>
+        <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: '10px', 
+            alignItems: 'center', 
+            justifyContent: 'center' }}
+            >            
+            <TeleopButton 
+                label="Sit / Stand Up"
+                action="SIT_STAND"
+                isActive={activeKeys.SIT_STAND}
+                isConnected={isConnected}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
+                inactiveColor="#2196f3"
+                activeColor="#1565c0"
+                customStyle={panelBtnStyle}
+            />
 
-            <button 
-                style={{ 
-                    ...baseBtnStyle, 
-                    background: isAlarmActive ? '#d32f2f' : '#f44336',
-                    transform: isAlarmActive ? 'translateY(2px)' : 'none',
-                    boxShadow: isAlarmActive ? 'inset 0 3px 5px rgba(0,0,0,0.5)' : '0 4px 6px rgba(0,0,0,0.3)'
-                }}
-                onPointerDown={handleAlarmDown}
-                onPointerUp={handleAlarmUp}
-                onPointerLeave={() => { if (isAlarmActive) handleAlarmUp(); }}
-                disabled={!isConnected}
-            >
-                Sound Alarm
-            </button>
+            <TeleopButton 
+                label="Sound Alarm"
+                action="ALARM"
+                isActive={activeKeys.ALARM}
+                isConnected={isConnected}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
+                inactiveColor="#c62828"
+                activeColor="#fa4a3d"
+                customStyle={panelBtnStyle}
+            />
 
+            <div style={{ marginTop: '16px', color: 'var(--text-secondary)', fontSize: '12px', textAlign: 'center' }}>
+                Buttons: [Z] Sit/Stand, [Spacebar] Alarm
+            </div>
         </div>
     );
 };

@@ -36,7 +36,7 @@ class MQTTManager:
                     data = json.loads(payload)
                 except Exception:
                     data = {"raw": payload}
-                item = ("mqtt", msg.topic, data)
+                item = ("mqtt", str(msg.topic), data)
                 try:
                     if self.queue:
                         self.queue.sync_q.put(item)
@@ -52,7 +52,7 @@ class MQTTManager:
         self.subscriptions[topic] = message_type
         if self.client:
             print(f"Adding MQTT subscription to topic: {topic}")
-            asyncio.create_task(self.client.subsrcibe(topic))
+            asyncio.create_task(self.client.subscribe(topic))
 
 
 mqtt_manager = MQTTManager()

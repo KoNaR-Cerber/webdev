@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, status
+from app.schemas import GPSDataSchema
+from fastapi import APIRouter, HTTPException, status, Request
 from ..schemas import MQTTSubscriptionRequest
 from ..services.mqtt_service import mqtt_manager
 
+# full path : /api/v1/mqtt
 router = APIRouter(prefix="/mqtt", tags=["mqtt"])
 
 @router.get("/topics", status_code=status.HTTP_200_OK)
@@ -20,3 +22,8 @@ async def subscribe_to_mqtt_topic(topic: MQTTSubscriptionRequest):
         )
     mqtt_manager.add_subscription(topic.topic)
     return {"message": f"Subscribed to MQTT topic: {topic.topic}"}
+
+@router.get("/gps",response_model=GPSDataSchema, status_code=status.HTTP_200_OK)
+async def get_gps_data(req: Request):
+    fallback = GPSDataSchema()
+    return getattr(req.app.state, "latest_gps_data", fallback)

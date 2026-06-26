@@ -88,14 +88,25 @@ const PanTiltWidget = () => {
 
     const renderBtn = (label, action) => (
         <TeleopButton 
-            label={label} action={action} isActive={activeKeys[action]} 
-            isConnected={isConnected} onPointerDown={handlePointerDown} onPointerUp={handlePointerUp} 
+            label={label} 
+            action={action} 
+            isActive={activeKeys[action]} 
+            isConnected={isConnected} 
+            onPointerDown={handlePointerDown} 
+            onPointerUp={handlePointerUp} 
             activeColor="#f44336" 
         />
     );
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '16px' }}>
+        <div style={{ display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        height: '100%', 
+        padding: '16px' 
+        }}
+    >
             <div style={{ display: 'flex' }}>
                 {renderBtn("▲", "UP")}
             </div>
