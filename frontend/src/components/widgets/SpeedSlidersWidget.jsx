@@ -11,7 +11,8 @@ const SpeedSlidersWidget = () => {
     };
     
     return (
-        <div className="widget-container" style={{ justifyContent: 'center' }}>
+        //  className="widget-container" 
+        <div  style={{ justifyContent: 'center' }}>
             <SliderRow 
                 label="Dog X (Forward/Backward)" 
                 value={speeds.dogX} 
