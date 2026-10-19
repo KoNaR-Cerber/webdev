@@ -1,3 +1,7 @@
+// 
+// TO BE CHANGED INTO A MAP??
+// 
+
 import React, { useState, useEffect} from "react";
 
 const GpsWidget = () => {

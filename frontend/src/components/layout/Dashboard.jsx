@@ -28,7 +28,7 @@ const Dashboard = () => {
     { i: 'movement', x: 0, y: 10, w: 2, h: 6 },
     { i: 'camera_controls', x: 2, y: 10, w: 2, h: 6},
     { i: 'actions', x: 4, y: 10, w: 2, h: 6 },
-    { i: 'speeds', x: 8, y: 10, w: 4, h: 8 },
+    //{ i: 'speeds', x: 8, y: 10, w: 4, h: 8 },
     { i: 'gps', x: 6, y: 10, w: 2, h: 6},
     // { i: 'telemetry', x: 8, y: 5, w: 4, h: 5 },
   
@@ -72,14 +72,14 @@ const Dashboard = () => {
                   streamPath="video/IR_cam" 
               />
           </div>
-          {/* Speeds module */}
+          {/* Speeds module
           <div key="speeds">
             <Card title="Speed Controls">
               <SpeedSlidersWidget />
             </Card>
-          </div> 
+          </div>  */}
 
-           {/* Speeds module */}
+           {/* GPS module */}
           <div key="gps">
             <Card title="GPS Location">
               <GpsWidget />
