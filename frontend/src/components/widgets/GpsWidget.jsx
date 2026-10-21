@@ -3,24 +3,39 @@
 // 
 
 import React, { useState, useEffect} from "react";
-import { MapContainer, useMap, TileLayer } from "react-leaflet";
+import { MapContainer, useMap, TileLayer, Popup, Marker } from "react-leaflet";
 
-
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
 
     const MakeDogMap = () => {
         const map = useMap();
         console.log('map center', map.getCenter());
         return null;
     }
+    
 
     const DogMap = () => {
         return (
-            <MapContainer center={[50.5, 30.5]} zoom={13}>
+            <MapContainer center={[50.5, 30.5]} zoom={13} style={{ height: '100%', width: '100%' }}>
                 <TileLayer
                             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                            url="https://{s}.tile.openstreetmap.org/50.5/30.5/500.png"
+                            url="https://{s}.tile.openstreetmap.org/{z}/{y}/{x}.png"
                         />
                 <MakeDogMap />
+                <Marker position={[50.5, 30.5]}>
+                            <Popup>
+                                Robot Position <br />
+                                Updated: 
+                            </Popup>
+                        </Marker>
             </MapContainer>
         )
     }   
@@ -75,6 +90,8 @@ const GpsWidget = () => {
 
         return; // () => clearInterval(intervalId);
     }, []);
+
+   // const position = [gpsData.latitude, gpsData.longitude];
 
     return (
         <div className="widget-container" style={{ alignItems: 'center', justifyContent: 'center', display: 'flex', flexDirection: 'column' }}>
