@@ -1,8 +1,29 @@
 // 
-// TO BE CHANGED INTO A MAP??
+// TO BE CHANGED INTO A MAP?? -- YES
 // 
 
 import React, { useState, useEffect} from "react";
+import { MapContainer, useMap, TileLayer } from "react-leaflet";
+
+
+
+    const MakeDogMap = () => {
+        const map = useMap();
+        console.log('map center', map.getCenter());
+        return null;
+    }
+
+    const DogMap = () => {
+        return (
+            <MapContainer center={[50.5, 30.5]} zoom={13}>
+                <TileLayer
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                            url="https://{s}.tile.openstreetmap.org/50.5/30.5/500.png"
+                        />
+                <MakeDogMap />
+            </MapContainer>
+        )
+    }   
 
 const GpsWidget = () => {
     const [gpsData, setGpsData] = useState({
@@ -15,6 +36,8 @@ const GpsWidget = () => {
         is_valid: false
     });
     const [apiStatus, setApiStatus] = useState('Connecting...');
+
+// MAKING A BEAAAUTIFUL MAPPPP
 
     useEffect(() => {
         const fetchGpsData = async () => {
@@ -46,23 +69,25 @@ const GpsWidget = () => {
             }
         };
         
-        fetchGpsData();
+        //fetchGpsData();
 
-        const intervalId = setInterval(fetchGpsData, 2000);
+        //const intervalId = setInterval(fetchGpsData, 2000);
 
-        return () => clearInterval(intervalId);
+        return; // () => clearInterval(intervalId);
     }, []);
 
     return (
-        <div className="widget-container" style={{ alignItems: 'center', justifyContent: 'center', display: 'flex', flexDirection: 'column' }}>            
-            <div style={{ fontSize: '18px', fontFamily: 'monospace', margin: '4px 0' }}>
+        <div className="widget-container" style={{ alignItems: 'center', justifyContent: 'center', display: 'flex', flexDirection: 'column' }}>
+            
+            <DogMap />            
+            {/* <div style={{ fontSize: '18px', fontFamily: 'monospace', margin: '4px 0' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>latitude: </span>
                 <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>
                     {gpsData.latitude.toFixed(6)}
                 </span>
             </div>
-            
-            <div style={{ fontSize: '18px', fontFamily: 'monospace', margin: '4px 0' }}>
+             */}
+            {/* <div style={{ fontSize: '18px', fontFamily: 'monospace', margin: '4px 0' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>longitude: </span>
                 <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>
                     {gpsData.longitude.toFixed(6)}
@@ -88,7 +113,7 @@ const GpsWidget = () => {
                 <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>
                     {gpsData.date}
                 </span>
-            </div>
+            </div> */}
 
             <div style={{ 
                 marginTop: '16px', 
