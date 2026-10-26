@@ -3,24 +3,22 @@ services:
     image: bluenviron/mediamtx:latest
     container_name: ${PROJECT_NAME}-mediamtx
     ports:
-      - "${SRT_PORT}:8890/udp"
-      - "${WEBRTC_PORT}:8889"
-      - "${STREAM_PORT}:8189"
+      - ${SRT_PORT}:8890/udp
+      - ${WEBRTC_PORT}:8889
+      - ${STREAM_PORT}:8189
     volumes:
       - ./server/mediamtx.yml:/mediamtx.yml
     restart: always
-
   mosquitto:
     image: eclipse-mosquitto:latest
     container_name: ${PROJECT_NAME}-mqtt
     ports:
-      - "${MQTT_PORT}:1883"
+      - ${MQTT_PORT}:1883
     volumes:
       - ./server/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto-data:/mosquitto/data
       - mosquitto-log:/mosquitto/log
     restart: always
-
   backend:
     build: ./backend
     container_name: ${PROJECT_NAME}-backend
@@ -35,15 +33,13 @@ services:
     depends_on:
       - influxdb
     restart: always
-
   frontend:
     build: ./frontend
     container_name: ${PROJECT_NAME}-frontend
     volumes:
       - frontend-dist:/app/dist
-    command: "sh -c npm run build"
-    restart: "no"
-
+    command: ["sh", "-c", "npm run build"]
+    restart: no
   influxdb:
     image: influxdb:2
     container_name: ${PROJECT_NAME}-influxdb
@@ -61,12 +57,11 @@ services:
 volumes:
   frontend-dist:
     name: ${PROJECT_NAME}_frontend-dist
-  mosquitto-data:
-  mosquitto-log:
-  influxdb-data:
-  prometheus-data:
-  grafana-data:
-
+  mosquitto-data: null
+  mosquitto-log: null
+  influxdb-data: null
+  prometheus-data: null
+  grafana-data: null
 networks:
   default:
     name: ${INTERNAL_NETWORK_NAME:-cerber_internal}
