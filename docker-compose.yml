@@ -1,98 +1,52 @@
 services:
-  wireguard:
-    image: lscr.io/linuxserver/wireguard:latest
-    container_name: wireguard
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - SERVERURL=${SERVER_IP}
-      - SERVERPORT=51820
-      - PEERS=robot1,maxpc1,maxpc2,borsukpc1,cardaverpc1,zielinskpc1,antonpc1
-    volumes:
-      - ./server/wg-config:/config
-    ports:
-      - "51820:51820/udp" # WireGuard VPN port
-      # - "3001:3001" # Grafana HTTP Port
-      #- "80:80" # Nginx HTTP port
-      #- "443:443" # Nginx HTTPS port
-      #- "8890:8890/udp" # SRT port (Mediamtx)
-      #- "8889:8889" # WebRTC port (Mediamtx)
-      #- "8189:8189" # Video streaming port (Mediamtx)
-
-    restart: unless-stopped
-
   mediamtx:
     image: bluenviron/mediamtx:latest
-    container_name: mediamtx
-    network_mode: "service:wireguard"
+    container_name: ${PROJECT_NAME:-cerber}-mediamtx
+    ports:
+      - "${SRT_PORT:-8890}:8890/udp"
+      - "${WEBRTC_PORT:-8889}:8889"
+      - "${STREAM_PORT:-8189}:8189"
     volumes:
       - ./server/mediamtx.yml:/mediamtx.yml
-    depends_on:
-      - wireguard
     restart: always
 
   mosquitto:
     image: eclipse-mosquitto:latest
-    container_name: mqtt-broker
+    container_name: ${PROJECT_NAME:-cerber}-mqtt
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
     volumes:
       - ./server/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - ./server/mosquitto/data:/mosquitto/data
-      - ./server/mosquitto/log:/mosquitto/log
-    network_mode: "service:wireguard"
-    depends_on:
-      - wireguard
-    restart: always
-
-  nginx:
-    image: nginx:latest
-    container_name: nginx-router
-    network_mode: "service:wireguard"
-    environment:
-      - GRAFANA_DASHBOARD_TOKEN=${GRAFANA_DASHBOARD_TOKEN}
-      - NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx
-    volumes:
-      - ./server/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
-      - ./server/certs:/etc/nginx/certs:ro
-      - frontend-dist:/usr/share/nginx/html:ro
-    depends_on:
-      - mediamtx
-      - mosquitto
-      - backend
-      - frontend
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
     restart: always
 
   backend:
     build: ./backend
-    container_name: backend
-    network_mode: "service:wireguard"
+    container_name: ${PROJECT_NAME:-cerber}-backend
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+      - INFLUXDB_TOKEN=${INFLUXDB_V2_TOKEN}
+      - INFLUXDB_ORG=KoNaR
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
     depends_on:
-      - wireguard
       - influxdb
-    env_file:
-      - .env
     restart: always
 
   frontend:
     build: ./frontend
-    container_name: frontend
-    network_mode: "service:wireguard"
+    container_name: ${PROJECT_NAME:-cerber}-frontend
     volumes:
       - frontend-dist:/app/dist
     command: "sh -c npm run build"
-    depends_on:
-      - wireguard
-    restart: no
+    restart: "no"
 
   influxdb:
     image: influxdb:2
-    container_name: influxdb
-    network_mode: "service:wireguard"
-    volumes:
-      - ./server/influxdb/data:/var/lib/influxdb2
-      - ./server/influxdb/config:/etc/influxdb2
+    container_name: ${PROJECT_NAME:-cerber}-influxdb
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=admin
@@ -100,50 +54,19 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=KoNaR
       - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET}
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_V2_TOKEN}
-    depends_on:
-      - wireguard
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - ./server/influxdb/config:/etc/influxdb2
     restart: always
-
-  wireguard-exporter:
-    image: mindflavor/prometheus-wireguard-exporter:latest
-    container_name: wireguard-exporter
-    user: "root"
-    cap_add:
-      - NET_ADMIN
-    network_mode: "service:wireguard" 
-    volumes:
-      - ./server/wg-config/wg_confs:/etc/wireguard:ro
-    command: ["--prepend_sudo", "false", "-n", "/etc/wireguard/wg0.conf"]
-    depends_on:
-      - wireguard
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    network_mode: "service:wireguard"
-    volumes:
-      - ./server/prometheus:/etc/prometheus
-      - prometheus-data:/prometheus
-    depends_on:
-      - wireguard
-      - wireguard-exporter
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana-oss:latest
-    container_name: grafana
-    network_mode: "service:wireguard"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
-      - GF_SERVER_HTTP_PORT=3001
-    volumes:
-      - grafana-data:/var/lib/grafana
-    depends_on:
-      - prometheus
-    restart: unless-stopped
-
 volumes:
   frontend-dist:
+  mosquitto-data:
+  mosquitto-log:
+  influxdb-data:
   prometheus-data:
   grafana-data:
+
+networks:
+  default:
+    name: cerber_internal
+    external: true
