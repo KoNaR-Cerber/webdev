@@ -1,20 +1,20 @@
 services:
   mediamtx:
     image: bluenviron/mediamtx:latest
-    container_name: ${PROJECT_NAME:-cerber}-mediamtx
+    container_name: ${PROJECT_NAME}-mediamtx
     ports:
-      - "${SRT_PORT:-8890}:8890/udp"
-      - "${WEBRTC_PORT:-8889}:8889"
-      - "${STREAM_PORT:-8189}:8189"
+      - "${SRT_PORT}:8890/udp"
+      - "${WEBRTC_PORT}:8889"
+      - "${STREAM_PORT}:8189"
     volumes:
       - ./server/mediamtx.yml:/mediamtx.yml
     restart: always
 
   mosquitto:
     image: eclipse-mosquitto:latest
-    container_name: ${PROJECT_NAME:-cerber}-mqtt
+    container_name: ${PROJECT_NAME}-mqtt
     ports:
-      - "${MQTT_PORT:-1883}:1883"
+      - "${MQTT_PORT}:1883"
     volumes:
       - ./server/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto-data:/mosquitto/data
@@ -23,9 +23,9 @@ services:
 
   backend:
     build: ./backend
-    container_name: ${PROJECT_NAME:-cerber}-backend
+    container_name: ${PROJECT_NAME}-backend
     environment:
-      - APP_ENV=${APP_ENV:-production}
+      - APP_ENV=${APP_ENV}
       - INFLUXDB_URL=http://influxdb:8086
       - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
       - INFLUXDB_TOKEN=${INFLUXDB_V2_TOKEN}
@@ -38,7 +38,7 @@ services:
 
   frontend:
     build: ./frontend
-    container_name: ${PROJECT_NAME:-cerber}-frontend
+    container_name: ${PROJECT_NAME}-frontend
     volumes:
       - frontend-dist:/app/dist
     command: "sh -c npm run build"
@@ -46,7 +46,7 @@ services:
 
   influxdb:
     image: influxdb:2
-    container_name: ${PROJECT_NAME:-cerber}-influxdb
+    container_name: ${PROJECT_NAME}-influxdb
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=admin
@@ -60,6 +60,7 @@ services:
     restart: always
 volumes:
   frontend-dist:
+    name: ${PROJECT_NAME}_frontend-dist
   mosquitto-data:
   mosquitto-log:
   influxdb-data:
@@ -68,5 +69,5 @@ volumes:
 
 networks:
   default:
-    name: cerber_internal
+    name: ${INTERNAL_NETWORK_NAME:-cerber_internal}
     external: true
