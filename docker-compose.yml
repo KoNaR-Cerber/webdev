@@ -33,6 +33,17 @@ services:
     depends_on:
       - influxdb
     restart: always
+  gateway:
+    build: ./gateway
+    container_name: ${PROJECT_NAME}-gateway
+    environment:
+      - API_KEY=${GATEWAY_API_KEY}
+      - ROSBRIDGE_HOST=${ROSBRIDGE_HOST:-10.13.13.2}
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+    depends_on:
+      - mosquitto
+    restart: always
   frontend:
     build: ./frontend
     container_name: ${PROJECT_NAME}-frontend

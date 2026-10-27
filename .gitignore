@@ -2,5 +2,6 @@
 postman
 .postman
 /backend/app/__pycache__
+/gateway/__pycache__
 /server/influxdb/config/influx-configs
 /server/influxdb/data

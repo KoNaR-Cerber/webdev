@@ -1,0 +1,43 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "robot_id": {
+      "title": "Robot Id",
+      "type": "string"
+    },
+    "model": {
+      "examples": [
+        "DEEP Robotics Lite3 Venture"
+      ],
+      "title": "Model",
+      "type": "string"
+    },
+    "online": {
+      "description": "True, gdy cokolwiek przyszlo z robota w ciagu `stale_after_s`",
+      "title": "Online",
+      "type": "boolean"
+    },
+    "last_seen": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "epoch [s]",
+      "title": "Last Seen"
+    }
+  },
+  "required": [
+    "robot_id",
+    "model",
+    "online"
+  ],
+  "title": "RobotSummary",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cerber.konar.pwr.edu.pl/schemas/RobotSummary.json"
+}
