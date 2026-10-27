@@ -15,7 +15,7 @@
           "type": "string"
         },
         "online": {
-          "description": "True, gdy cokolwiek przyszlo z robota w ciagu `stale_after_s`",
+          "description": "True, gdy rosbridge polaczony i ostatnia wiadomosc ROS przyszla w ciagu STALE_AFTER_S; GPS/MQTT sie nie liczy",
           "title": "Online",
           "type": "boolean"
         },
@@ -29,7 +29,7 @@
             }
           ],
           "default": null,
-          "description": "epoch [s]",
+          "description": "epoch [s] ostatniej wiadomosci ROS",
           "title": "Last Seen"
         }
       },

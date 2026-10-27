@@ -18,9 +18,10 @@ API_VERSION = "1.0.0"
 
 
 class Strict(BaseModel):
-    """Baza: nieznane pola sa odrzucane, zeby kontrakt byl jednoznaczny."""
+    """Baza: nieznane pola sa odrzucane, zeby kontrakt byl jednoznaczny. NaN/Infinity
+    (json.loads w roslibpy i MQTT je przyjmuje) sa odrzucane - JSON ich nie ma, wyszlyby jako null."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
 # --- skladowe telemetrii ----------------------------------------------------
@@ -108,6 +109,20 @@ class SensorsAlive(Strict):
 # --- snapshot i zdarzenia --------------------------------------------------
 
 
+class RobotStatus(Strict):
+    """Stan robota i polaczen gatewaya. Na WS jako zdarzenie `status`: od razu przy zmianie
+    online / rosbridge_connected / mqtt_connected i jako heartbeat co WS_HEARTBEAT_S (domyslnie 5 s)."""
+
+    online: bool = Field(description="rosbridge polaczony i ostatnia wiadomosc ROS w ciagu STALE_AFTER_S (domyslnie 5 s); GPS/MQTT sie nie liczy")
+    last_seen: Optional[float] = Field(description="epoch [s] ostatniej wiadomosci ROS; null, dopoki zadna nie przyszla")
+    rosbridge_connected: bool = Field(description="WebSocket do rosbridge otwarty")
+    mqtt_connected: bool = Field(description="Polaczenie z brokerem MQTT (GPS)")
+
+
+def _status_unknown() -> RobotStatus:
+    return RobotStatus(online=False, last_seen=None, rosbridge_connected=False, mqtt_connected=False)
+
+
 class TelemetrySnapshot(Strict):
     """Ostatni znany stan robota. Kazda sekcja jest null, dopoki nie przyjdzie
     pierwsza wiadomosc z odpowiedniego zrodla; `*_at` mowi, kiedy ja odebrano."""
@@ -131,6 +146,8 @@ class TelemetrySnapshot(Strict):
         default=None, ge=0, le=100,
         description="Zarezerwowane: stockowy node Lite3 nie publikuje baterii; null dopoki ROS nie doda publishera",
     )
+    status: RobotStatus = Field(default_factory=_status_unknown,
+                                description="Stan w chwili wyslania snapshotu (/telemetry/latest, pierwsza ramka WS)")
 
 
 class ImuEvent(Strict):
@@ -182,11 +199,14 @@ class SensorsAliveEvent(Strict):
     data: SensorsAlive
 
 
-class PingEvent(Strict):
-    """Keepalive wysylany po 20 s bez ruchu od klienta; klient nie musi odpowiadac."""
+class StatusEvent(Strict):
+    """Zmiana stanu (online, rosbridge_connected, mqtt_connected) albo heartbeat co WS_HEARTBEAT_S.
+    Bez throttlingu; klient nie musi odpowiadac."""
 
-    type: Literal["ping"] = "ping"
-    ts: float
+    type: Literal["status"] = "status"
+    robot_id: str
+    ts: float = Field(description="epoch [s] wyslania")
+    data: RobotStatus
 
 
 class SnapshotEvent(Strict):
@@ -200,7 +220,7 @@ class SnapshotEvent(Strict):
 
 TelemetryEvent = Union[
     SnapshotEvent, ImuEvent, JointsEvent, OdometryEvent,
-    UltrasoundEvent, PtzEvent, GpsEvent, SensorsAliveEvent, PingEvent,
+    UltrasoundEvent, PtzEvent, GpsEvent, SensorsAliveEvent, StatusEvent,
 ]
 
 
@@ -218,8 +238,8 @@ class TelemetryEventEnvelope(BaseModel):
 class RobotSummary(Strict):
     robot_id: str
     model: str = Field(examples=["DEEP Robotics Lite3 Venture"])
-    online: bool = Field(description="True, gdy cokolwiek przyszlo z robota w ciagu `stale_after_s`")
-    last_seen: Optional[float] = Field(default=None, description="epoch [s]")
+    online: bool = Field(description="True, gdy rosbridge polaczony i ostatnia wiadomosc ROS przyszla w ciagu STALE_AFTER_S; GPS/MQTT sie nie liczy")
+    last_seen: Optional[float] = Field(default=None, description="epoch [s] ostatniej wiadomosci ROS")
 
 
 class RobotList(Strict):

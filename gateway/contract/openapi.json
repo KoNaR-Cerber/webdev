@@ -703,6 +703,47 @@
         ],
         "title": "RobotList"
       },
+      "RobotStatus": {
+        "properties": {
+          "online": {
+            "type": "boolean",
+            "title": "Online",
+            "description": "rosbridge polaczony i ostatnia wiadomosc ROS w ciagu STALE_AFTER_S (domyslnie 5 s); GPS/MQTT sie nie liczy"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen",
+            "description": "epoch [s] ostatniej wiadomosci ROS; null, dopoki zadna nie przyszla"
+          },
+          "rosbridge_connected": {
+            "type": "boolean",
+            "title": "Rosbridge Connected",
+            "description": "WebSocket do rosbridge otwarty"
+          },
+          "mqtt_connected": {
+            "type": "boolean",
+            "title": "Mqtt Connected",
+            "description": "Polaczenie z brokerem MQTT (GPS)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "online",
+          "last_seen",
+          "rosbridge_connected",
+          "mqtt_connected"
+        ],
+        "title": "RobotStatus",
+        "description": "Stan robota i polaczen gatewaya. Na WS jako zdarzenie `status`: od razu przy zmianie\nonline / rosbridge_connected / mqtt_connected i jako heartbeat co WS_HEARTBEAT_S (domyslnie 5 s)."
+      },
       "RobotSummary": {
         "properties": {
           "robot_id": {
@@ -719,7 +760,7 @@
           "online": {
             "type": "boolean",
             "title": "Online",
-            "description": "True, gdy cokolwiek przyszlo z robota w ciagu `stale_after_s`"
+            "description": "True, gdy rosbridge polaczony i ostatnia wiadomosc ROS przyszla w ciagu STALE_AFTER_S; GPS/MQTT sie nie liczy"
           },
           "last_seen": {
             "anyOf": [
@@ -731,7 +772,7 @@
               }
             ],
             "title": "Last Seen",
-            "description": "epoch [s]"
+            "description": "epoch [s] ostatniej wiadomosci ROS"
           }
         },
         "additionalProperties": false,
@@ -976,6 +1017,10 @@
             ],
             "title": "Battery Percent",
             "description": "Zarezerwowane: stockowy node Lite3 nie publikuje baterii; null dopoki ROS nie doda publishera"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RobotStatus",
+            "description": "Stan w chwili wyslania snapshotu (/telemetry/latest, pierwsza ramka WS)"
           }
         },
         "additionalProperties": false,
@@ -1123,10 +1168,10 @@
                 "imu": "#/components/schemas/ImuEvent",
                 "joints": "#/components/schemas/JointsEvent",
                 "odometry": "#/components/schemas/OdometryEvent",
-                "ping": "#/components/schemas/PingEvent",
                 "ptz": "#/components/schemas/PtzEvent",
                 "sensors_alive": "#/components/schemas/SensorsAliveEvent",
                 "snapshot": "#/components/schemas/SnapshotEvent",
+                "status": "#/components/schemas/StatusEvent",
                 "ultrasound": "#/components/schemas/UltrasoundEvent"
               },
               "propertyName": "type"
@@ -1157,7 +1202,7 @@
                 "$ref": "#/components/schemas/SensorsAliveEvent"
               },
               {
-                "$ref": "#/components/schemas/PingEvent"
+                "$ref": "#/components/schemas/StatusEvent"
               }
             ],
             "title": "Event"
@@ -1286,27 +1331,6 @@
         "title": "OdometryEvent",
         "type": "object"
       },
-      "PingEvent": {
-        "additionalProperties": false,
-        "description": "Keepalive wysylany po 20 s bez ruchu od klienta; klient nie musi odpowiadac.",
-        "properties": {
-          "type": {
-            "const": "ping",
-            "default": "ping",
-            "title": "Type",
-            "type": "string"
-          },
-          "ts": {
-            "title": "Ts",
-            "type": "number"
-          }
-        },
-        "required": [
-          "ts"
-        ],
-        "title": "PingEvent",
-        "type": "object"
-      },
       "PtzEvent": {
         "additionalProperties": false,
         "properties": {
@@ -1395,6 +1419,37 @@
         "title": "SnapshotEvent",
         "type": "object"
       },
+      "StatusEvent": {
+        "additionalProperties": false,
+        "description": "Zmiana stanu (online, rosbridge_connected, mqtt_connected) albo heartbeat co WS_HEARTBEAT_S.\nBez throttlingu; klient nie musi odpowiadac.",
+        "properties": {
+          "type": {
+            "const": "status",
+            "default": "status",
+            "title": "Type",
+            "type": "string"
+          },
+          "robot_id": {
+            "title": "Robot Id",
+            "type": "string"
+          },
+          "ts": {
+            "description": "epoch [s] wyslania",
+            "title": "Ts",
+            "type": "number"
+          },
+          "data": {
+            "$ref": "#/components/schemas/RobotStatus"
+          }
+        },
+        "required": [
+          "robot_id",
+          "ts",
+          "data"
+        ],
+        "title": "StatusEvent",
+        "type": "object"
+      },
       "UltrasoundEvent": {
         "additionalProperties": false,
         "properties": {
@@ -1437,23 +1492,33 @@
   },
   "x-websockets": {
     "/api/v1/robots/{robot_id}/telemetry/stream": {
-      "description": "Strumien zdarzen TelemetryEventEnvelope. Pierwsza ramka = `snapshot`, potem\n    zdarzenia per zrodlo (IMU/joints/odometry/ultrasound z throttlingiem do IMU_MAX_HZ).\n    Ramki od klienta (tekst i binarne) sa ignorowane. Po 20 s bez ruchu od klienta\n    serwer wysyla ramke `ping` (w schemacie envelope); klient nie musi odpowiadac.\n    Zly klucz -> zamkniecie kodem 4401, nieznany robot_id -> 4404 (po accept, wiec\n    klient dostaje kod).",
+      "description": "Strumien zdarzen TelemetryEventEnvelope. Pierwsza ramka = `snapshot` (z polem `status`),\n    potem zdarzenia per zrodlo. Throttling per typ (imu, joints, odometry, ultrasound, ptz,\n    sensors_alive, gps; nie snapshot i status): najwyzej 1 ramka na WS_THROTTLE_S (domyslnie 1 s).\n    Pierwsze zdarzenie typu idzie od razu, kolejne w oknie zastepuja sie nawzajem, a ostatnie\n    wychodzi na koniec okna - ostatnia wartosc dochodzi zawsze, najpozniej po WS_THROTTLE_S.\n    Snapshot (pierwsza ramka, /telemetry/latest) jest aktualizowany kazda wiadomoscia.\n    Zdarzenie `status` (RobotStatus: online, last_seen, rosbridge_connected, mqtt_connected) bez\n    throttlingu: od razu przy zmianie online / rosbridge_connected / mqtt_connected (offline\n    wykrywany najpozniej ~1 s po STALE_AFTER_S bez wiadomosci ROS) i jako heartbeat co\n    WS_HEARTBEAT_S (domyslnie 5 s) niezaleznie od aktywnosci klienta; klient nie musi odpowiadac.\n    online = rosbridge polaczony i ostatnia wiadomosc ROS w ciagu STALE_AFTER_S (GPS sie nie liczy).\n    Ramki od klienta (tekst i binarne, max 4096 B - wieksze -> 1009) sa ignorowane. Zly klucz ->\n    zamkniecie kodem 4401, nieznany robot_id -> 4404 (po accept, wiec klient dostaje kod).\n    Limit polaczen na robota (MAX_WS_CLIENTS) -> 1013. Brak odpowiedzi na ping WS (protokolu,\n    serwer pinguje co 20 s, czeka 20 s na pong) -> 1011; przy WS_THROTTLE_S=1 tak zwykle\n    jest rozlaczany klient, ktory przestal czytac (po ~40 s). Przepelniona kolejka (100 ramek;\n    wyzsze tempo lub WS_THROTTLE_S=0) -> 1008 tylko jesli bufor TCP zdazy sie oproznic w 1 s,\n    zwykle zerwanie polaczenia bez ramki close (u klienta 1006).",
       "query": {
         "api_key": "string, wymagany"
       },
       "closeCodes": {
         "4401": "zly klucz (po accept)",
-        "4404": "nieznany robot_id (po accept)"
+        "4404": "nieznany robot_id (po accept)",
+        "1013": "limit polaczen WS na robota (MAX_WS_CLIENTS) - sprobuj pozniej",
+        "1008": "klient nie odbiera ramek (przepelniona kolejka 100) - rozlaczony; kod dochodzi tylko, gdy bufor TCP zdazy sie oproznic w 1 s, zwykle zerwanie bez ramki close (1006)",
+        "1009": "ramka od klienta wieksza niz 4096 B",
+        "1011": "brak odpowiedzi na ping WS (ping co 20 s, 20 s na pong); przy WS_THROTTLE_S=1 zwykle tak rozlaczany jest klient, ktory przestal czytac (po ~40 s)"
       },
       "message": {
         "$ref": "#/components/schemas/TelemetryEventEnvelope"
       },
-      "keepalive": {
-        "event": {
-          "type": "ping",
-          "ts": "epoch [s]"
+      "status": {
+        "event": "status",
+        "data": {
+          "$ref": "#/components/schemas/RobotStatus"
         },
-        "after_idle_s": 20
+        "heartbeat_s": 5.0,
+        "on_change": [
+          "online",
+          "rosbridge_connected",
+          "mqtt_connected"
+        ],
+        "throttled": false
       }
     }
   }

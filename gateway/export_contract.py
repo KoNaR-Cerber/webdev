@@ -10,10 +10,10 @@ Uruchom:  python export_contract.py [katalog_docelowy]
 import json
 import os
 import sys
-import time
 
 os.environ.setdefault("ROSBRIDGE_ENABLED", "0")
 os.environ.setdefault("MQTT_ENABLED", "0")
+os.environ.pop("WS_HEARTBEAT_S", None)  # heartbeat_s w x-websockets ma byc domyslny, nie z biezacej powloki
 
 import contracts as c  # noqa: E402
 from main import app  # noqa: E402
@@ -21,7 +21,7 @@ from main import app  # noqa: E402
 OUT = sys.argv[1] if len(sys.argv) > 1 else "contract"
 MODELS = [
     c.TelemetrySnapshot, c.TelemetryEventEnvelope, c.GPSFix, c.Imu, c.Joints, c.Odometry,
-    c.Ptz, c.SensorsAlive, c.RobotList, c.RobotSummary, c.VideoStreamList, c.Health, c.Error,
+    c.Ptz, c.SensorsAlive, c.RobotStatus, c.RobotList, c.RobotSummary, c.VideoStreamList, c.Health, c.Error,
 ]
 
 
@@ -61,6 +61,7 @@ def main() -> None:
                      altitude=118.4, satellites=9, fix_quality=1),
         gps_at=now - 1.0,
         sensors_alive=c.SensorsAlive(imu=True, odom=True, joints=True, realsense=True, lidar=False, ultrasound=True),
+        status=c.RobotStatus(online=True, last_seen=now - 0.004, rosbridge_connected=True, mqtt_connected=True),
     )
     dump(f"{OUT}/examples/telemetry_latest.json", snap.model_dump(mode="json"))
     dump(f"{OUT}/examples/ws_snapshot_event.json",
@@ -69,6 +70,9 @@ def main() -> None:
          c.TelemetryEventEnvelope(event=c.ImuEvent(robot_id=snap.robot_id, ts=now, data=snap.imu)).model_dump(mode="json"))
     dump(f"{OUT}/examples/ws_gps_event.json",
          c.TelemetryEventEnvelope(event=c.GpsEvent(robot_id=snap.robot_id, ts=now, data=snap.gps)).model_dump(mode="json"))
+    dump(f"{OUT}/examples/ws_status_event.json",
+         c.TelemetryEventEnvelope(event=c.StatusEvent(robot_id=snap.robot_id, ts=now, data=snap.status))
+         .model_dump(mode="json"))
     dump(f"{OUT}/examples/robots.json",
          c.RobotList(robots=[c.RobotSummary(robot_id=snap.robot_id, model="DEEP Robotics Lite3 Venture",
                                             online=True, last_seen=now)]).model_dump(mode="json"))
@@ -81,10 +85,11 @@ def main() -> None:
     # round-trip: przyklady musza przechodzic przez modele (extra=forbid)
     for name, model in [("telemetry_latest", c.TelemetrySnapshot), ("ws_snapshot_event", c.TelemetryEventEnvelope),
                         ("ws_imu_event", c.TelemetryEventEnvelope), ("ws_gps_event", c.TelemetryEventEnvelope),
+                        ("ws_status_event", c.TelemetryEventEnvelope),
                         ("robots", c.RobotList), ("streams", c.VideoStreamList)]:
         with open(f"{OUT}/examples/{name}.json", encoding="utf-8") as f:
             model.model_validate_json(f.read())
-    print(f"OK: {OUT}/openapi.json, {len(MODELS)} schem, 6 przykladow")
+    print(f"OK: {OUT}/openapi.json, {len(MODELS)} schem, 7 przykladow")
 
 
 if __name__ == "__main__":
