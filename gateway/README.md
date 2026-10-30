@@ -5,7 +5,7 @@ Gateway stoi w sieci VPN, czyta rosbridge i MQTT, a na zewnątrz wystawia
 wyłącznie odczyt: REST + WebSocket. Sterowanie nie jest wystawione.
 
 ```
-robot (ROS 2) --rosbridge ws:9090 (VPN)--> gateway (serwer w VPN) --nginx 443--> świat
+robot (ROS 2) --rosbridge ws:9090 (VPN)--> gateway (serwer w VPN) --Caddy 443--> świat
 GPS           --MQTT cerber/gps/data-^
 ```
 
@@ -118,19 +118,24 @@ pytest -q tests
 Serwis `gateway` jest w `docker-compose.yml` (sieć `cerber_internal`) bez `ports:` — ruch z zewnątrz idzie
 tylko przez reverse proxy. Klucz ustaw w `.env` jako `GATEWAY_API_KEY`; bez niego kontener nie wystartuje.
 
-Konfiguracja dla nginx (w bloku `server`), **bez** `allow/deny` (zabezpieczeniem jest klucz API).
-Upstream idzie przez `resolver` + zmienną, więc nginx startuje i przeładowuje się także wtedy, gdy kontener
-gatewaya nie działa (stały `proxy_pass http://gateway:8000` wymaga rozwiązania nazwy przy starcie).
+Konfiguracja dla Caddy 2 na osobnej publicznej nazwie hosta (tu `gateway.example.org`), **bez** list dostępu
+(zabezpieczeniem jest klucz API). Upstream `cerber-staging-gateway:8000` to kontener `${PROJECT_NAME}-gateway`
+z `docker-compose.yml`; w tym samym projekcie compose wystarczy nazwa serwisu `gateway:8000`. Caddy musi być
+w sieci `cerber_internal`. Nazwę upstreamu Caddy rozwiązuje przy każdym żądaniu, więc startuje i przeładowuje
+się także wtedy, gdy kontener gatewaya nie działa (odpowiada wtedy 502). Certyfikat TLS dla hosta bierze sam
+z ACME. WebSocket działa w `reverse_proxy` bez dodatkowej konfiguracji (upgrade przechodzi sam);
+`stream_close_delay` tylko opóźnia zerwanie otwartych WS po `caddy reload`.
 
-WebSocket niesie klucz w query (`?api_key=…`). Samo `access_log off` nie wystarcza: nginx wpisuje linię
-żądania i URI upstreamu (z query) także do `error_log`, np. przy błędzie połączenia z gatewayem. Dlatego
-w lokacji WS (także z `/` na końcu ścieżki) wyłączone są oba logi; jeśli te błędy są potrzebne, zamiast
-`/dev/null` użyj osobnego pliku z dostępem tylko dla admina i krótką rotacją.
+WebSocket niesie klucz w query (`?api_key=…`). Bez dyrektywy `log` w bloku hosta Caddy nie pisze access logu
+w ogóle. Jeśli go włączasz, dodaj filtr `query` na polu `request>uri`, który usuwa (`delete`) albo maskuje
+(`replace`) `api_key` — jak niżej. Błędy obsługi żądania (np. 502, gdy gateway nie działa) Caddy pisze do
+swojego domyślnego loggera (stderr, czyli `docker logs`) razem z `request>uri`, dlatego ten sam filtr jest też
+w globalnym bloku `log` na początku Caddyfile.
 
-Klienci REST wysyłają klucz **wyłącznie** w nagłówku `X-API-Key`, nigdy w query. Gdyby jednak któryś dopisał
-go do URL, access log REST w nginx używa formatu `noquery` (sama ścieżka `$uri`, bez query). `error_log`
-lokacji REST przy błędzie upstreamu nadal zawiera pełną linię żądania — ta sama rada: plik tylko dla admina,
-krótka rotacja.
+Klienci REST wysyłają klucz **wyłącznie** w nagłówku `X-API-Key`, nigdy w query. Caddy loguje w access logu
+wszystkie nagłówki żądania (`log_credentials` chroni tylko `Cookie` i `Authorization`), więc filtr usuwa też
+`request>headers>X-Api-Key`. Gdyby któryś klient dopisał klucz do URL, filtr `query` obejmuje też ścieżki REST
+(jeden `log` na cały host).
 
 Sam gateway wycina ze swoich logów wartość `api_key` (także z zakodowaną nazwą lub separatorem, np.
 `%61pi_key`, `api_key%3D`, `api_key%3A`, `"api_key": "…"`, `%22api_key%22%3A%22…`), nagłówek `X-API-Key`
@@ -140,34 +145,42 @@ wielkości liter (np. `%2b` z .NET), w ścieżce, query, `raw_path` na `--log-le
 Ramki WS na `--log-level debug` (od klienta i do klienta, także odesłany PING/CLOSE) są logowane tylko jako
 typ i rozmiar, bez treści; na `trace` powód zamknięcia od klienta tylko jako długość.
 
-```nginx
-# w kontekście http (np. osobny plik w conf.d/), nie w server: log bez query string
-log_format noquery '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" '
-                   '$status $body_bytes_sent "$http_referer" "$http_user_agent"';
-```
-
-```nginx
-resolver 127.0.0.11 valid=10s ipv6=off;       # DNS Dockera
-set $gateway_upstream http://gateway:8000;    # nazwa serwisu w sieci cerber_internal; bez URI -> idzie oryginalne URI z query
-
-location ~ ^/api/v1/robots/[^/]+/telemetry/stream/?$ {
-    access_log off;                      # klucz API jest w query string...
-    error_log /dev/null;                 # ...i w linii żądania / URI upstreamu w error logu
-    proxy_pass $gateway_upstream;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-    proxy_read_timeout 3600;
+```caddyfile
+{
+	# opcje globalne: domyślny logger Caddy'ego (stderr -> docker logs); tu trafiają m.in. błędy 502 z request>uri
+	log {
+		format filter {
+			request>uri query {
+				delete api_key
+			}
+			request>headers>X-Api-Key delete
+		}
+	}
 }
-location /api/v1/ {
-    access_log /var/log/nginx/access.log noquery;   # REST: klucz tylko w X-API-Key, query nie logujemy
-    proxy_pass $gateway_upstream;
-    proxy_set_header Host $host;
-}
-location = /health {
-    access_log /var/log/nginx/access.log noquery;
-    proxy_pass $gateway_upstream;
+
+gateway.example.org {
+	# TLS: certyfikat dla tej nazwy Caddy pobiera sam z ACME
+	@gateway path /health /api/v1/*
+	handle @gateway {
+		# kontener ${PROJECT_NAME}-gateway w sieci cerber_internal; w tym samym projekcie compose wystarczy gateway:8000
+		reverse_proxy cerber-staging-gateway:8000 {
+			stream_close_delay 5m   # po `caddy reload` nie zrywaj otwartych WS od razu
+		}
+	}
+	handle {
+		respond 404
+	}
+
+	# bez tego bloku Caddy nie pisze access logu wcale; jeśli włączasz, usuń klucz z query (WS) i z nagłówka (REST)
+	log {
+		output file /var/log/caddy/gateway.log
+		format filter {
+			request>uri query {
+				replace api_key REDACTED
+			}
+			request>headers>X-Api-Key delete
+		}
+	}
 }
 ```
 
