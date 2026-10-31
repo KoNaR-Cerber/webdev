@@ -116,15 +116,21 @@ pytest -q tests
 ## Wystawienie publicznie
 
 Serwis `gateway` jest w `docker-compose.yml` (sieć `cerber_internal`) bez `ports:` — ruch z zewnątrz idzie
-tylko przez reverse proxy. Klucz ustaw w `.env` jako `GATEWAY_API_KEY`; bez niego kontener nie wystartuje.
+tylko przez reverse proxy. W `.env` stacku ustaw `GATEWAY_API_KEY` (bez niego kontener nie wystartuje) oraz `ROSBRIDGE_HOST`
+(adres robota w VPN; domyślna wartość w `docker-compose.yml` jest tylko przykładem).
 
-Konfiguracja dla Caddy 2 na osobnej publicznej nazwie hosta (tu `gateway.example.org`), **bez** list dostępu
-(zabezpieczeniem jest klucz API). Upstream `cerber-staging-gateway:8000` to kontener `${PROJECT_NAME}-gateway`
-z `docker-compose.yml`; w tym samym projekcie compose wystarczy nazwa serwisu `gateway:8000`. Caddy musi być
-w sieci `cerber_internal`. Nazwę upstreamu Caddy rozwiązuje przy każdym żądaniu, więc startuje i przeładowuje
-się także wtedy, gdy kontener gatewaya nie działa (odpowiada wtedy 502). Certyfikat TLS dla hosta bierze sam
-z ACME. WebSocket działa w `reverse_proxy` bez dodatkowej konfiguracji (upgrade przechodzi sam);
-`stream_close_delay` tylko opóźnia zerwanie otwartych WS po `caddy reload`.
+Konfiguracja dla Caddy 2 na **tej samej** publicznej nazwie hosta co frontend i backend (tu `cerber.example.org`),
+**bez** list dostępu (zabezpieczeniem jest klucz API). Gateway i backend dzielą przestrzeń `/api/v1/*`, więc
+Caddy rozdziela je po ścieżce: `/health`, `/api/v1/robots`, `/api/v1/robots/*`, `/docs` i `/openapi.json` idą do
+gatewaya, pozostałe `/api/*` do backendu, reszta to SPA. Bloki `handle` są rozłączne; Caddy sortuje po długości tylko pojedyncze matchery `path`, a matcher
+gatewaya ma kilka ścieżek, więc zostaje w kolejności z pliku — blok gatewaya musi stać przed `handle /api/*`
+(kolejność tras można sprawdzić przez `caddy adapt`). Ścieżki nie są obcinane — gateway serwuje
+dokładnie te adresy, które ma w kontrakcie. Upstream `cerber-staging-gateway:8000` to kontener
+`${PROJECT_NAME}-gateway` z `docker-compose.yml`; w tym samym projekcie compose wystarczy nazwa serwisu
+`gateway:8000`. Caddy musi być w sieci `cerber_internal`. Nazwę upstreamu Caddy rozwiązuje przy każdym żądaniu,
+więc startuje i przeładowuje się także wtedy, gdy kontener gatewaya nie działa (odpowiada wtedy 502). Certyfikat
+TLS dla hosta bierze sam z ACME. WebSocket działa w `reverse_proxy` bez dodatkowej konfiguracji (upgrade
+przechodzi sam); `stream_close_delay` tylko opóźnia zerwanie otwartych WS po `caddy reload`.
 
 WebSocket niesie klucz w query (`?api_key=…`). Bez dyrektywy `log` w bloku hosta Caddy nie pisze access logu
 w ogóle. Jeśli go włączasz, dodaj filtr `query` na polu `request>uri`, który usuwa (`delete`) albo maskuje
@@ -158,22 +164,33 @@ typ i rozmiar, bez treści; na `trace` powód zamknięcia od klienta tylko jako 
 	}
 }
 
-gateway.example.org {
+cerber.example.org {
 	# TLS: certyfikat dla tej nazwy Caddy pobiera sam z ACME
-	@gateway path /health /api/v1/*
+
+	# gateway telemetrii: konkretne ścieżki, przed ogólnym /api/*
+	@gateway path /health /api/v1/robots /api/v1/robots/* /docs /openapi.json
 	handle @gateway {
 		# kontener ${PROJECT_NAME}-gateway w sieci cerber_internal; w tym samym projekcie compose wystarczy gateway:8000
 		reverse_proxy cerber-staging-gateway:8000 {
 			stream_close_delay 5m   # po `caddy reload` nie zrywaj otwartych WS od razu
 		}
 	}
+
+	# pozostałe /api/* to backend (pełna ścieżka, bez obcinania)
+	handle /api/* {
+		reverse_proxy cerber-staging-backend:3000
+	}
+
+	# reszta: SPA frontendu
 	handle {
-		respond 404
+		root * /srv/frontend-dist
+		try_files {path} /index.html
+		file_server
 	}
 
 	# bez tego bloku Caddy nie pisze access logu wcale; jeśli włączasz, usuń klucz z query (WS) i z nagłówka (REST)
 	log {
-		output file /var/log/caddy/gateway.log
+		output file /var/log/caddy/cerber.log
 		format filter {
 			request>uri query {
 				replace api_key REDACTED
