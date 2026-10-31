@@ -78,8 +78,8 @@ def main() -> None:
                                             online=True, last_seen=now)]).model_dump(mode="json"))
     dump(f"{OUT}/examples/streams.json",
          c.VideoStreamList(streams=[
-             c.VideoStream(name="normal_cam", path="video/normal_cam", whep_url="https://10.13.13.1/video/normal_cam/whep"),
-             c.VideoStream(name="IR_cam", path="video/IR_cam", whep_url="https://10.13.13.1/video/IR_cam/whep"),
+             c.VideoStream(name="normal_cam", path="video/normal_cam", whep_url="/video/normal_cam/whep"),
+             c.VideoStream(name="IR_cam", path="video/IR_cam", whep_url="/video/IR_cam/whep"),
          ]).model_dump(mode="json"))
 
     # round-trip: przyklady musza przechodzic przez modele (extra=forbid)

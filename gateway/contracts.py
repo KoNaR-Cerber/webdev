@@ -249,7 +249,7 @@ class RobotList(Strict):
 class VideoStream(Strict):
     name: str = Field(examples=["normal_cam", "IR_cam"])
     path: str = Field(description="Sciezka MediaMTX", examples=["video/normal_cam"])
-    whep_url: str = Field(description="POST SDP offer tutaj (Content-Type: application/sdp)")
+    whep_url: str = Field(description="POST SDP offer tutaj (Content-Type: application/sdp). Bezwzgledny, gdy ustawiono MEDIAMTX_BASE; inaczej sciezka wzgledna na tym samym hoscie co API")
     codec: str = Field(default="H264")
     vpn_only: bool = Field(default=True, description="True, gdy proxy/firewall ogranicza /video do VPN (STREAMS_VPN_ONLY); flaga z konfiguracji, nie stan sieci")
 

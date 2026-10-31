@@ -60,7 +60,7 @@ ROSBRIDGE_PORT = int(os.getenv("ROSBRIDGE_PORT", "9090"))
 MQTT_HOST = os.getenv("MQTT_HOST", "10.13.13.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_GPS_TOPIC = os.getenv("MQTT_GPS_TOPIC", "cerber/gps/data")
-MEDIAMTX_BASE = os.getenv("MEDIAMTX_BASE", "https://10.13.13.1/video")
+MEDIAMTX_BASE = os.getenv("MEDIAMTX_BASE", "").rstrip("/")  # pusta = whep_url wzgledne: /video/<cam>/whep
 STALE_AFTER_S = float(os.getenv("STALE_AFTER_S", "5"))
 WS_THROTTLE_S = float(os.getenv("WS_THROTTLE_S", "1.0"))  # max 1 ramka WS na tyle sekund na typ; 0 = bez
 WS_HEARTBEAT_S = float(os.getenv("WS_HEARTBEAT_S", "5"))  # status do kazdego klienta co tyle; 0 = tylko zmiany
@@ -625,7 +625,7 @@ async def gps_latest(robot_id: str) -> GPSFix:
 async def streams(robot_id: str) -> VideoStreamList:
     get_robot(robot_id)
     return VideoStreamList(streams=[
-        VideoStream(name=n, path=p, whep_url=f"{MEDIAMTX_BASE}/{n}/whep", vpn_only=STREAMS_VPN_ONLY)
+        VideoStream(name=n, path=p, whep_url=f"{MEDIAMTX_BASE}/{p}/whep", vpn_only=STREAMS_VPN_ONLY)
         for n, p in VIDEO_STREAMS
     ])
 

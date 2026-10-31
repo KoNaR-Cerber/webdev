@@ -20,7 +20,7 @@
           "type": "string"
         },
         "whep_url": {
-          "description": "POST SDP offer tutaj (Content-Type: application/sdp)",
+          "description": "POST SDP offer tutaj (Content-Type: application/sdp). Bezwzgledny, gdy ustawiono MEDIAMTX_BASE; inaczej sciezka wzgledna na tym samym hoscie co API",
           "title": "Whep Url",
           "type": "string"
         },

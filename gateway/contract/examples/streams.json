@@ -3,14 +3,14 @@
     {
       "name": "normal_cam",
       "path": "video/normal_cam",
-      "whep_url": "https://10.13.13.1/video/normal_cam/whep",
+      "whep_url": "/video/normal_cam/whep",
       "codec": "H264",
       "vpn_only": true
     },
     {
       "name": "IR_cam",
       "path": "video/IR_cam",
-      "whep_url": "https://10.13.13.1/video/IR_cam/whep",
+      "whep_url": "/video/IR_cam/whep",
       "codec": "H264",
       "vpn_only": true
     }
