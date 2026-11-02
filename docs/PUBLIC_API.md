@@ -1,80 +1,81 @@
-# Cerber — publiczne API robota i drona
+# Cerber public API for the robot and the drone
 
-Dokument dla zespołów integrujących się z platformą Cerber: telemetria robota (REST + WebSocket) oraz obraz
-z kamer robota i drona (WebRTC). Wszystko wychodzi z jednego hosta, tu nazwanego `cerber.example.org`
-(w paczce przekazanej zespołowi stoi tu prawdziwa nazwa). Klucz API przekazujemy osobnym kanałem.
+This document is for teams integrating with the Cerber platform. It covers robot telemetry over REST and
+WebSocket, and video from the robot and drone cameras over WebRTC. Everything is served from one host,
+`cerber.machinekind.ai`. We send the API key through a separate channel.
 
 ```
-                        https://cerber.example.org
-  /health, /api/v1/robots/*  ──► gateway telemetrii (REST, WS; klucz API)
-  /video/<ścieżka>/whep      ──► MediaMTX (WebRTC/WHEP; bez klucza)
-  /docs, /openapi.json       ──► dokumentacja interaktywna i kontrakt OpenAPI 3.1
+                        https://cerber.machinekind.ai
+  /health, /api/v1/robots/*  ──► telemetry gateway (REST, WS; API key)
+  /video/<path>/whep         ──► MediaMTX (WebRTC/WHEP; no key)
+  /docs, /openapi.json       ──► interactive docs and OpenAPI 3.1 contract
 ```
 
-Zasady:
+Rules:
 
-- API jest **tylko do odczytu**. Sterowanie robotem i dronem nie jest wystawione i nie będzie przez to API.
-- Telemetria wymaga klucza API. Obraz z kamer jest publiczny (bez klucza), bo przeglądarka nie potrafi
-  utrzymać sekretu.
-- Środowisko to staging przygotowany pod pokazy. Robot jest online tylko w czasie testów i pokazów;
-  strumienie `*/demo` działają zawsze, do rozwijania integracji bez sprzętu.
-- Kontrakt (`openapi.json`, schematy JSON, przykłady) jest generowany z kodu i wersjonowany razem z nim.
-  Zmiany łamiące kontrakt zapowiadamy przed wdrożeniem.
+- The API is **read-only**. It does not expose control of the robot or the drone, and this API never will.
+- Telemetry requires an API key. Camera video is public and needs no key, because a browser cannot keep a secret.
+- The web dashboard at `/` is reachable only from the project VPN and is not part of the public offering.
+  The public parts are the telemetry API, `/docs`, `/openapi.json` and `/video/*`.
+- The environment is a staging setup prepared for demos. The robot is online only during tests and demos.
+  The `*/demo` streams always run, so you can build an integration without hardware.
+- The contract (`openapi.json`, JSON schemas, examples) is generated from the code and versioned with it.
+  We announce breaking changes before we deploy them.
 
-## 1. Klucz API
+## 1. API key
 
-| Gdzie | Jak |
+| Where | How |
 |---|---|
-| REST | nagłówek `X-API-Key: <klucz>` |
-| WebSocket | parametr query `?api_key=<klucz>` (przeglądarka nie pozwala ustawić nagłówka) |
+| REST | header `X-API-Key: <key>` |
+| WebSocket | query parameter `?api_key=<key>` (browsers cannot set the header) |
 
-Zły lub brakujący klucz: REST → `401 {"detail": "..."}`; WS → połączenie przyjęte i natychmiast zamknięte kodem
-`4401`. Klucz nie może trafić do repozytorium, logów ani publicznego czatu; w razie wycieku rotujemy go po
-naszej stronie i przekazujemy nowy. Klucza **nie** dopisujcie do adresów REST w query.
+A wrong or missing key returns `401 {"detail": "..."}` on REST. On WS the server accepts the connection and
+closes it immediately with code `4401`. Keep the key out of repositories, logs and public chats. If it leaks,
+we rotate it on our side and send you a new one. Do **not** put the key in REST query strings.
 
-## 2. Telemetria robota — REST
+## 2. Robot telemetry: REST
 
-Bazowy adres: `https://cerber.example.org`. Identyfikator robota: `cerber-lite3-01` (lista w `/api/v1/robots`).
+Base URL: `https://cerber.machinekind.ai`. Robot ID: `cerber-lite3-01`. `/api/v1/robots` lists all robots.
 
-| Metoda | Ścieżka | Odpowiedź |
+| Method | Path | Response |
 |---|---|---|
-| GET | `/health` | `Health` — stan gatewaya i jego połączeń z robotem; bez klucza |
+| GET | `/health` | `Health` with the gateway state and its connections to the robot. No key needed. |
 | GET | `/api/v1/robots` | `RobotList` |
 | GET | `/api/v1/robots/{robot_id}` | `RobotSummary` (`online`, `last_seen`) |
-| GET | `/api/v1/robots/{robot_id}/telemetry/latest` | `TelemetrySnapshot` — ostatni znany stan wszystkich źródeł |
-| GET | `/api/v1/robots/{robot_id}/gps/latest` | `GPSFix` albo `404`, gdy jeszcze nie było pozycji |
-| GET | `/api/v1/robots/{robot_id}/streams` | `VideoStreamList` — adresy WHEP kamer robota |
+| GET | `/api/v1/robots/{robot_id}/telemetry/latest` | `TelemetrySnapshot` with the last known state of every source |
+| GET | `/api/v1/robots/{robot_id}/gps/latest` | `GPSFix`, or `404` if no position has arrived yet |
+| GET | `/api/v1/robots/{robot_id}/streams` | `VideoStreamList` with the WHEP URLs of the robot cameras |
 
 ```bash
-export CERBER_KEY=...   # z osobnego kanału
-curl -s https://cerber.example.org/health
-curl -s -H "X-API-Key: $CERBER_KEY" https://cerber.example.org/api/v1/robots
-curl -s -H "X-API-Key: $CERBER_KEY" https://cerber.example.org/api/v1/robots/cerber-lite3-01/telemetry/latest
+export CERBER_KEY=...   # from the separate channel
+curl -s https://cerber.machinekind.ai/health
+curl -s -H "X-API-Key: $CERBER_KEY" https://cerber.machinekind.ai/api/v1/robots
+curl -s -H "X-API-Key: $CERBER_KEY" https://cerber.machinekind.ai/api/v1/robots/cerber-lite3-01/telemetry/latest
 ```
 
-`/health` (bez klucza) mówi, czy warto w ogóle pytać o dane:
+Call `/health` to decide whether to request data at all. It needs no key.
 
 ```json
 {"status": "degraded", "version": "1.0.0", "rosbridge_connected": false, "mqtt_connected": true, "ts": 1793605324.49}
 ```
 
-`status` to `ok`, gdy oba źródła są połączone, inaczej `degraded`. `degraded` z `rosbridge_connected: false`
-oznacza po prostu, że robot jest wyłączony lub poza VPN — API odpowiada normalnie, tylko dane ROS się nie
-odświeżają.
+`status` is `ok` when both sources are connected, and `degraded` otherwise. `degraded` with
+`rosbridge_connected: false` means the robot is off or outside the VPN. The API still responds, but ROS data
+stops updating.
 
-### Znaczenie pól
+### Field meanings
 
-- `online` = robot ma otwarte połączenie z gatewayem **i** przysłał cokolwiek w ciągu ostatnich 5 s.
-  `last_seen` = czas ostatniej wiadomości z robota (epoch, sekundy, float).
-- `TelemetrySnapshot` ma sekcje `imu`, `joints`, `odometry`, `ultrasound`, `ptz`, `gps`, `sensors_alive`
-  i dla każdej czas odbioru `*_at`. Sekcja jest `null`, dopóki dane danego typu nie przyszły od startu gatewaya.
-  Pole `status` jest wyliczane w chwili odpowiedzi.
-- Wszystkie czasy (`ts`, `*_at`, `last_seen`) to czas odbioru przez serwer (epoch), nie zegar robota.
-- Jednostki: kąty w radianach, prędkości kątowe rad/s, przyspieszenia m/s², pozycje i prędkości w metrach
-  i m/s, `ultrasound` w metrach. GPS: stopnie dziesiętne, wysokość w metrach.
-- `battery_percent` jest na razie zawsze `null` (robot nie publikuje stanu baterii).
+- `online` means the robot has an open connection to the gateway **and** sent something in the last 5 s.
+- `last_seen` is the time of the last message from the robot, in epoch seconds as a float.
+- `TelemetrySnapshot` has the sections `imu`, `joints`, `odometry`, `ultrasound`, `ptz`, `gps` and
+  `sensors_alive`. Each section has a receive time `*_at`. A section stays `null` until data of its type
+  arrives after the gateway starts. The `status` field is computed when the response is built.
+- All times (`ts`, `*_at`, `last_seen`) are server receive times (epoch). The robot clock is not used.
+- Units: angles in radians, angular velocities in rad/s, accelerations in m/s², positions in metres,
+  velocities in m/s, `ultrasound` in metres. GPS uses decimal degrees and altitude in metres.
+- `battery_percent` is always `null` for now. The robot does not publish battery state.
 
-Przykład (skrócony) `GET /api/v1/robots/cerber-lite3-01/telemetry/latest`:
+Shortened example of `GET /api/v1/robots/cerber-lite3-01/telemetry/latest`:
 
 ```json
 {
@@ -90,58 +91,58 @@ Przykład (skrócony) `GET /api/v1/robots/cerber-lite3-01/telemetry/latest`:
 }
 ```
 
-Pełne przykłady każdego typu są w paczce w `examples/`, schematy w `schemas/`.
+The package has full examples of every type in `examples/` and the schemas in `schemas/`.
 
-### Błędy
+### Errors
 
-| Kod | Kiedy |
+| Code | When |
 |---|---|
-| 401 | brak lub zły klucz |
-| 404 | nieznany `robot_id`, albo `/gps/latest` zanim przyszła pierwsza pozycja |
-| 502 | gateway nie działa (odpowiada reverse proxy); spróbuj ponownie po chwili |
+| 401 | missing or wrong key |
+| 404 | unknown `robot_id`, or `/gps/latest` before the first position arrives |
+| 502 | the gateway is down and the reverse proxy answers. Retry after a moment. |
 
-Treść błędu: `{"detail": "..."}` (schemat `Error`).
+Error body: `{"detail": "..."}` (schema `Error`).
 
-## 3. Telemetria robota — WebSocket
+## 3. Robot telemetry: WebSocket
 
 ```
-wss://cerber.example.org/api/v1/robots/cerber-lite3-01/telemetry/stream?api_key=<klucz>
+wss://cerber.machinekind.ai/api/v1/robots/cerber-lite3-01/telemetry/stream?api_key=<key>
 ```
 
-Serwer wysyła tylko tekstowe ramki JSON w kopercie `TelemetryEventEnvelope`:
+The server sends only text JSON frames, wrapped in a `TelemetryEventEnvelope`:
 
 ```json
 {"event": {"type": "gps", "robot_id": "cerber-lite3-01", "ts": 1761487391.0, "data": {"latitude": 51.107885, "longitude": 17.038538, "...": "..."}}}
 ```
 
-| `type` | `data` | Uwagi |
+| `type` | `data` | Notes |
 |---|---|---|
-| `snapshot` | `TelemetrySnapshot` | zawsze pierwsza ramka po połączeniu |
-| `imu`, `joints`, `odometry`, `ultrasound`, `ptz`, `gps`, `sensors_alive` | odpowiedni model | najwyżej **1 ramka na sekundę na typ**; w oknie wygrywa ostatnia wartość, więc stan końcowy zawsze dochodzi |
-| `status` | `RobotStatus` | od razu przy zmianie `online` / `rosbridge_connected` / `mqtt_connected` oraz jako heartbeat **co 5 s** |
+| `snapshot` | `TelemetrySnapshot` | always the first frame after connecting |
+| `imu`, `joints`, `odometry`, `ultrasound`, `ptz`, `gps`, `sensors_alive` | matching model | at most **1 frame per second per type**. The last value in each window wins, so the final state always arrives. |
+| `status` | `RobotStatus` | sent at once when `online`, `rosbridge_connected` or `mqtt_connected` changes, and as a heartbeat **every 5 s** |
 
-Klient nie musi nic wysyłać; ramki od klienta są ignorowane (limit 4096 B, większa = zamknięcie `1009`).
-Brak jakiejkolwiek ramki przez ponad ~15 s oznacza zerwane połączenie — połącz się ponownie.
+You do not need to send anything. The server ignores client frames. The limit is 4096 B, and a larger frame
+closes the connection with `1009`. If no frame arrives for more than ~15 s, the connection is dead. Reconnect.
 
-Kody zamknięcia:
+Close codes:
 
-| Kod | Znaczenie | Co robić |
+| Code | Meaning | What to do |
 |---|---|---|
-| 4401 | zły klucz | popraw klucz, nie ponawiaj w pętli |
-| 4404 | nieznany `robot_id` | sprawdź `/api/v1/robots` |
-| 1013 | limit 20 równoległych połączeń na robota | ponów po kilku sekundach, współdziel jedno połączenie w aplikacji |
-| 1011 | klient nie odpowiedział na ping WS (ping co 20 s) | biblioteka WS musi odpowiadać na ping automatycznie (standardowe robią) |
-| 1006 / 1008 | klient nie nadążał z odbiorem | czytaj ramki na bieżąco, nie blokuj pętli odbioru |
+| 4401 | wrong key | fix the key, do not retry in a loop |
+| 4404 | unknown `robot_id` | check `/api/v1/robots` |
+| 1013 | limit of 20 concurrent connections per robot | retry after a few seconds, share one connection in your application |
+| 1011 | client did not answer the WS ping (sent every 20 s) | your WS library must answer pings automatically. Standard libraries do. |
+| 1006 / 1008 | client did not read fast enough | read frames as they arrive, do not block the receive loop |
 
-Ponawianie: wykładniczy backoff od 1 s do 30 s. Nie otwierajcie wielu połączeń na jednego użytkownika —
-jedno połączenie na aplikację i rozgłaszanie wewnątrz.
+Retry with exponential backoff from 1 s to 30 s. Do not open several connections per user. Open one connection
+per application and distribute the events internally.
 
-Minimalny klient (Python, `pip install websockets`):
+Minimal client (Python, `pip install websockets`):
 
 ```python
 import asyncio, json, os, websockets
 
-URL = f"wss://cerber.example.org/api/v1/robots/cerber-lite3-01/telemetry/stream?api_key={os.environ['CERBER_KEY']}"
+URL = f"wss://cerber.machinekind.ai/api/v1/robots/cerber-lite3-01/telemetry/stream?api_key={os.environ['CERBER_KEY']}"
 
 async def main():
     async with websockets.connect(URL) as ws:
@@ -152,31 +153,30 @@ async def main():
 asyncio.run(main())
 ```
 
-W przeglądarce: `new WebSocket(url)` i `JSON.parse(e.data).event` w `onmessage`. Klucz w adresie WS jest
-widoczny w narzędziach deweloperskich, więc aplikacje publiczne powinny trzymać WS po swojej stronie
-(backend-proxy), a do przeglądarki wysyłać własny strumień.
+In a browser, use `new WebSocket(url)` and read `JSON.parse(e.data).event` in `onmessage`. The key in the WS
+URL is visible in the browser developer tools. A public application should therefore keep the WS connection
+on its backend and send its own stream to the browser.
 
-## 4. Obraz z kamer — WebRTC (WHEP)
+## 4. Camera video: WebRTC (WHEP)
 
-Odtwarzanie jest publiczne i nie wymaga klucza. Każda kamera to ścieżka MediaMTX pod `/video/`:
+Playback is public and needs no key. Each camera is a MediaMTX path under `/video/`:
 
-| Ścieżka | Źródło | Dostępność |
+| Path | Source | Availability |
 |---|---|---|
-| `video/normal_cam` | kamera RGB robota | gdy robot nadaje |
-| `video/IR_cam` | kamera termowizyjna robota | gdy robot nadaje |
-| `video/dji01` | dron DJI Mavic 3M | gdy operator nadaje |
-| `video/normal_cam/demo` | obraz testowy / nagranie w pętli | zawsze |
-| `video/dji01/demo` | obraz testowy / nagranie w pętli | zawsze |
+| `video/normal_cam` | robot RGB camera | while the robot streams |
+| `video/IR_cam` | robot thermal camera | while the robot streams |
+| `video/dji01` | DJI Mavic 3M drone | while the operator streams |
+| `video/normal_cam/demo` | test pattern or looped recording | always |
+| `video/dji01/demo` | test pattern or looped recording | always |
 
-Dwa sposoby odtwarzania:
+There are two ways to play a stream:
 
-1. **Wbudowany odtwarzacz** (do szybkiego podglądu, także w `<iframe>`):
-   `https://cerber.example.org/video/dji01/demo/`
-2. **WHEP** we własnej aplikacji: `POST https://cerber.example.org/video/<ścieżka>/whep`
-   - żądanie: `Content-Type: application/sdp`, w treści oferta SDP (`recvonly`);
-   - odpowiedź `201`: treść to odpowiedź SDP, nagłówek `Location` to adres sesji;
-   - zakończenie: `DELETE <Location>` (inaczej sesja wygasa sama po kilkunastu sekundach bez ruchu);
-   - `404`, gdy nikt aktualnie nie nadaje na tej ścieżce — ponawiajcie z backoffem (2 s → 30 s), nie co sekundę.
+1. **Built-in player** for a quick preview, also inside an `<iframe>`: `https://cerber.machinekind.ai/video/dji01/demo/`
+2. **WHEP** in your own application: `POST https://cerber.machinekind.ai/video/<path>/whep`
+   - Request: `Content-Type: application/sdp`, with the SDP offer (`recvonly`) as the body.
+   - Response `201`: the body is the SDP answer. The `Location` header is the session URL.
+   - End the session with `DELETE <Location>`. Otherwise it expires after a dozen or so seconds without traffic.
+   - `404` means nobody is streaming on this path. Retry with backoff from 2 s to 30 s, never every second.
 
 ```js
 async function playWhep(video, path) {
@@ -185,87 +185,86 @@ async function playWhep(video, path) {
   pc.ontrack = (e) => { video.srcObject = e.streams[0]; };
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  const res = await fetch(`https://cerber.example.org/${path}/whep`, {
+  const res = await fetch(`https://cerber.machinekind.ai/${path}/whep`, {
     method: "POST", headers: { "Content-Type": "application/sdp" }, body: offer.sdp,
   });
-  if (res.status === 404) throw new Error("no stream");           // nikt nie nadaje
-  const session = new URL(res.headers.get("Location"), res.url);  // do DELETE przy zamykaniu
+  if (res.status === 404) throw new Error("no stream");           // nobody is streaming
+  const session = new URL(res.headers.get("Location"), res.url);  // for DELETE on close
   await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
   return () => { fetch(session, { method: "DELETE", keepalive: true }); pc.close(); };
 }
 playWhep(document.querySelector("video"), "video/dji01/demo");
 ```
 
-Wymagania sieciowe po stronie klienta: oprócz HTTPS/443 ruch mediów idzie **UDP lub TCP na port 18189**
-serwera, wprost na jego publiczny adres IP z kandydatów ICE (z pominięciem proxy HTTP; STUN/TURN nie jest potrzebny). Sieci firmowe
-blokujące UDP wychodzący działają po TCP, z nieco większym opóźnieniem.
+Client network requirements: besides HTTPS on 443, media goes over **UDP or TCP to port 18189** on the server.
+It goes straight to the server's public IP address from the ICE candidates and bypasses HTTP proxies. You do
+not need STUN or TURN. Corporate networks that block outbound UDP work over TCP, with slightly higher latency.
 
-Format: H.264, bez dźwięku w przeglądarce (dron nadaje AAC, którego WebRTC nie przenosi). Zapis, HLS
-i RTSP nie są publicznie dostępne.
+Format: H.264. Browsers get no audio, because the drone sends AAC and WebRTC does not carry it. Recording,
+HLS and RTSP are not publicly available.
 
-`GET /api/v1/robots/{robot_id}/streams` zwraca te same adresy WHEP dla kamer robota, żeby aplikacja nie
-musiała ich mieć na sztywno (`whep_url` jest względny do hosta API). Pole `vpn_only` to flaga konfiguracji,
-nie stan sieci; obecnie `false`.
+`GET /api/v1/robots/{robot_id}/streams` returns the same WHEP URLs for the robot cameras, so your application
+does not have to hard-code them. `whep_url` is relative to the API host. The `vpn_only` field is a
+configuration flag and does not reflect network state. It is currently `false`.
 
-## 5. Nadawanie obrazu (dla dostawców źródeł)
+## 5. Publishing video (for source providers)
 
-### Dron DJI — RTMP z internetu
+### DJI drone: RTMP from the internet
 
 | | |
 |---|---|
-| adres | `rtmp://cerber.example.org:1935/video/dji01?user=<login>&pass=<hasło>` |
-| aplikacje z dwoma polami (DJI Fly / Pilot, OBS) | URL `rtmp://cerber.example.org:1935/video`, klucz strumienia `dji01?user=<login>&pass=<hasło>` |
-| kodek | H.264, odstęp klatek kluczowych ≤ 2 s, bez B-klatek; bitrate według łącza LTE |
-| dźwięk | przyjmowany, ale nie trafia do przeglądarki |
+| URL | `rtmp://cerber.machinekind.ai:1935/video/dji01?user=<login>&pass=<password>` |
+| apps with two fields (DJI Fly / Pilot, OBS) | URL `rtmp://cerber.machinekind.ai:1935/video`, stream key `dji01?user=<login>&pass=<password>` |
+| codec | H.264, keyframe interval ≤ 2 s, no B-frames. Set the bitrate to fit the LTE link. |
+| audio | accepted, but does not reach the browser |
 
-Login i hasło przekazujemy osobno; jedno nadawanie na raz (drugi nadawca na tę samą ścieżkę jest odrzucany).
-RTMPS nie jest obecnie skonfigurowane. Test bez drona (dowolna maszyna z ffmpeg):
+We send the login and password separately. One publisher can stream at a time, and a second publisher on the
+same path is rejected. RTMPS is not configured yet. To test without a drone, run this on any machine with ffmpeg:
 
 ```bash
 ffmpeg -re -f lavfi -i testsrc2=size=1280x720:rate=30 -c:v libx264 -preset ultrafast -tune zerolatency \
-  -g 60 -pix_fmt yuv420p -b:v 2000k -an -f flv "rtmp://cerber.example.org:1935/video/dji01?user=$U&pass=$P"
+  -g 60 -pix_fmt yuv420p -b:v 2000k -an -f flv "rtmp://cerber.machinekind.ai:1935/video/dji01?user=$U&pass=$P"
 ```
 
-### Robot — tylko przez VPN
+### Robot: VPN only
 
-Robot i serwer są w jednej sieci VPN (NetBird). Poniższe adresy nie są dostępne z internetu; adres serwera
-w VPN (`<SERVER_VPN_ADDR>`) i zaproszenie do sieci przekazujemy osobno.
+The robot and the server are on one VPN network (NetBird). The addresses below are not reachable from the
+internet. We send the server's VPN address (`<SERVER_VPN_ADDR>`) and the network invitation separately.
 
-| Co | Dokąd | Format |
+| What | Where to | Format |
 |---|---|---|
-| kamery | `srt://<SERVER_VPN_ADDR>:18890?streamid=publish:video/normal_cam&pkt_size=1316` (analogicznie `video/IR_cam`) | MPEG-TS/H.264 po SRT, bez hasła |
-| GPS | MQTT `<SERVER_VPN_ADDR>:11883`, topic `cerber/gps/data` | JSON: `latitude`, `longitude` (stopnie), `date` (ISO 8601 UTC), opcjonalnie `altitude`, `satellites`, `fix_quality` |
-| telemetria ROS 2 | robot wystawia rosbridge (WebSocket, port 9090) w VPN; gateway sam się do niego łączy | tematy: `/imu/data`, `/joint_states`, `/leg_odom2`, `/us_publisher/ultrasound_distance`, `/ptz/status`, `/sensor_status/*_isalive` |
+| cameras | `srt://<SERVER_VPN_ADDR>:18890?streamid=publish:video/normal_cam&pkt_size=1316` (same for `video/IR_cam`) | MPEG-TS/H.264 over SRT, no password |
+| GPS | MQTT `<SERVER_VPN_ADDR>:11883`, topic `cerber/gps/data` | JSON: `latitude`, `longitude` (degrees), `date` (ISO 8601 UTC), optional `altitude`, `satellites`, `fix_quality` |
+| ROS 2 telemetry | the robot exposes rosbridge (WebSocket, port 9090) in the VPN. The gateway connects to it. | topics: `/imu/data`, `/joint_states`, `/leg_odom2`, `/us_publisher/ultrasound_distance`, `/ptz/status`, `/sensor_status/*_isalive` |
 
-## 6. Kontrakt i paczka
+## 6. Contract and package
 
-Zawartość paczki `cerber-public-api-<data>.zip`:
+Contents of `cerber-public-api-<date>.zip`:
 
-| Plik | Co to |
+| File | Contents |
 |---|---|
-| `README.md` | ten dokument z prawdziwą nazwą hosta |
-| `openapi.json` | OpenAPI 3.1 gatewaya z polem `servers`; strumień WS opisany w rozszerzeniu `x-websockets` (OpenAPI nie ma natywnego opisu WS) |
-| `schemas/*.json` | JSON Schema (draft 2020-12) każdego modelu, do walidacji w CI klienta |
-| `examples/*.json` | przykładowe odpowiedzi REST i ramki WS, zwalidowane schematami |
+| `README.md` | this document |
+| `openapi.json` | the gateway's OpenAPI 3.1 with a `servers` field. The WS stream is described in the `x-websockets` extension, because OpenAPI cannot describe WS natively. |
+| `schemas/*.json` | JSON Schema (draft 2020-12) for each model, for validation in your CI |
+| `examples/*.json` | sample REST responses and WS frames, validated against the schemas |
 
-To samo na żywo: `https://cerber.example.org/openapi.json` (kontrakt) i `https://cerber.example.org/docs`
-(Swagger UI, można wykonać żądanie z kluczem przyciskiem *Authorize*). Generowanie klienta, np.
-`openapi-generator-cli generate -i openapi.json -g typescript-fetch -o client/`.
+The same files are live at `https://cerber.machinekind.ai/openapi.json` (contract) and
+`https://cerber.machinekind.ai/docs` (Swagger UI). In Swagger UI the *Authorize* button lets you send requests
+with your key. Generate a client with, for example, `openapi-generator-cli generate -i openapi.json -g typescript-fetch -o client/`.
 
-Kontrakt wideo (WHEP) to standard IETF (draft-ietf-wish-whep) w implementacji MediaMTX i nie jest częścią
-`openapi.json`.
+The video contract (WHEP) is an IETF standard (draft-ietf-wish-whep) as implemented by MediaMTX. It is not
+part of `openapi.json`.
 
-## 7. Limity i dobre praktyki
+## 7. Limits and good practice
 
-- REST: odpytywanie `/telemetry/latest` częściej niż raz na sekundę nie ma sensu (dane i tak nie zmieniają
-  się częściej niż throttling WS). Do danych na żywo używajcie WS.
-- WS: 20 połączeń na robota łącznie dla wszystkich integracji. Jedno połączenie na aplikację.
-- WHEP: każdy widz to osobna sesja WebRTC po stronie serwera; przy pokazach z wieloma widzami dajcie znać
-  wcześniej.
-- Dostępność: bez SLA; to środowisko demonstracyjne. Stan serwera sprawdza `/health`, stan robota pole
-  `online`. Planowane przerwy ogłaszamy z wyprzedzeniem.
+- REST: polling `/telemetry/latest` more than once per second gains nothing. The data does not change faster
+  than the WS throttling allows. Use WS for live data.
+- WS: 20 connections per robot, shared by all integrations. Use one connection per application.
+- WHEP: each viewer is a separate WebRTC session on the server. Tell us in advance about demos with many viewers.
+- Availability: there is no SLA. This is a demo environment. `/health` shows the server state, and `online`
+  shows the robot state. We announce planned downtime in advance.
 
-## 8. Kontakt i zgłaszanie problemów
+## 8. Contact and issue reports
 
-Zgłoszenia z adresem, czasem (UTC), kodem odpowiedzi/zamknięcia WS i, jeśli to możliwe, fragmentem
-odpowiedzi — kanałem ustalonym przy przekazaniu klucza. Klucza i haseł nie wklejajcie do zgłoszeń.
+Report issues through the channel agreed when we handed over the key. Include the URL, the time in UTC, the
+response code or WS close code and, if possible, part of the response body. Never paste the key or passwords.
