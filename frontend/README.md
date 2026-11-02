@@ -1,4 +1,8 @@
-# Robot Web Dashboard
+# TIME TO CHANGE THIS STUFF
+
+
+
+<!-- # Robot Web Dashboard
 
 A React-based web interface for remotely monitoring and controlling a ROS 2 robot. This dashboard connects to the robot via a WireGuard VPN, consuming low-latency WebRTC video streams and interfacing with ROS topics via `rosbridge_server`.
 
@@ -41,4 +45,4 @@ The UI is modular. To add new capabilities:
 1. Create a new widget in `src/components/widgets/` (e.g., `MyNewWidget.jsx`).
 2. Wrap its content in the reusable `<Card>` UI component.
 3. Hook into ROS data using `const { telemetry, sendCommand } = useRobot();`.
-4. Add it to the grid layout inside `src/components/layout/Dashboard.jsx`.
+4. Add it to the grid layout inside `src/components/layout/Dashboard.jsx`. -->
