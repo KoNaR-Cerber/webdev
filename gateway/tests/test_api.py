@@ -402,3 +402,18 @@ def test_drop_log_one_line_and_rate_limited(capsys):
         main.gps_from_mqtt({"latitude": math.nan, "longitude": math.inf})
     except ValidationError as e:
         assert logs.why(e) == "GPSFix latitude: Input should be a finite number (+1 more)"
+
+
+def test_cors_preflight_and_headers(client):
+    # przegladarka z innego origin: preflight bez klucza musi przejsc, odpowiedz dopuszcza X-API-Key
+    r = client.options("/api/v1/robots", headers={"Origin": "https://app.example",
+                                                   "Access-Control-Request-Method": "GET",
+                                                   "Access-Control-Request-Headers": "x-api-key"})
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == "*"
+    assert "x-api-key" in r.headers["access-control-allow-headers"].lower()
+    # wlasciwe zadanie: naglowek CORS takze na 200 i na 401
+    ok = client.get("/api/v1/robots", headers={**H, "Origin": "https://app.example"})
+    assert ok.status_code == 200 and ok.headers["access-control-allow-origin"] == "*"
+    bad = client.get("/api/v1/robots", headers={"X-API-Key": "nope", "Origin": "https://app.example"})
+    assert bad.status_code == 401 and bad.headers["access-control-allow-origin"] == "*"

@@ -1,5 +1,5 @@
 # MediaMTX: wejscia od nadawcow, wyjscie WebRTC/WHEP dla przegladarek (za reverse proxy, trasa /video/*).
-#  - SRT (:8890)  : kamery robota; port dostepny tylko z VPN (firewall), publikowanie bez hasla.
+#  - SRT (:8890)  : kamery robota; publikowanie bez hasla, ale tylko z adresow z ROBOT_PUBLISH_IPS (.env, siec VPN).
 #  - RTMP (:1935) : dron DJI z internetu; publikowanie wymaga loginu i hasla z .env (patrz authInternalUsers).
 #  - RTSP (:8554) : opcjonalne wyjscie diagnostyczne (ffplay/VLC), domyslnie wylaczone; wlacza .env przez MTX_RTSP.
 # Nieuzywane protokoly wylaczone, zeby kontener nie nasluchiwal na zbednych portach.
@@ -39,10 +39,13 @@ authInternalUsers:
     permissions:
       - action: read
       - action: playback
-  # 1: publikowanie bez hasla tylko na kamery robota (SRT, wejscie osiagalne wylacznie z VPN).
+  # 1: publikowanie bez hasla tylko na kamery robota. Lista ips to jedyna blokada: RTMP (:1935) jest
+  #    publiczny i uzywa tych samych uprawnien, wiec bez niej kazdy z internetu moglby podmienic obraz
+  #    kamery robota. Tu tylko localhost; siec VPN dopisuje .env przez MTX_AUTHINTERNALUSERS_1_IPS
+  #    (ROBOT_PUBLISH_IPS w docker-compose.yml, lista CIDR po przecinku).
   - user: any
     pass:
-    ips: []
+    ips: ["127.0.0.1", "::1"]
     permissions:
       - action: publish
         path: '~^video/(normal_cam|IR_cam)$'

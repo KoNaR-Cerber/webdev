@@ -31,6 +31,8 @@ Rules:
 
 A wrong or missing key returns `401 {"detail": "..."}` on REST. On WS, the server accepts the connection and immediately closes it with `4401`. Keep the key out of repositories, logs and public chats. Leaked keys are rotated and replacements supplied. Do not put the key in REST query strings.
 
+Browser clients: CORS is open for every origin on REST and on WHEP. The `X-API-Key` header triggers a preflight `OPTIONS`, which passes without a key. The key is visible in developer tools, so a public web application should keep it on its own backend.
+
 ## 2. Robot telemetry: REST
 Base URL: `https://cerber.machinekind.ai`. Robot ID: `cerber-lite3-01`. `/api/v1/robots` lists all robots.
 
@@ -159,7 +161,7 @@ Each camera is a MediaMTX path under `/video/`. Live cameras require the API key
 
 ### Authentication for live cameras
 
-Send `X-API-Key: <key>` on every request to a live camera path: the WHEP `POST`, and the `PATCH` and `DELETE` on the session URL. Missing or wrong key returns `401`. The built-in player page cannot send the header, so from the internet it works only for demo streams. Media packets (ICE, DTLS, SRTP) carry no key.
+Send `X-API-Key: <key>` on every request to a live camera path: the WHEP `POST`, and the `PATCH` and `DELETE` on the session URL. Missing or wrong key returns `401`. The built-in player page cannot send the header, so from the internet it works only for demo streams. Media packets (ICE, DTLS, SRTP) carry no key. From a browser on another origin, the preflight `OPTIONS` needs no key and `X-API-Key` is an allowed header.
 
 Use the built-in player at `https://cerber.machinekind.ai/video/<path>/demo/`, including inside an `<iframe>`. For WHEP playback in your application, send `POST https://cerber.machinekind.ai/video/<path>/whep` with `Content-Type: application/sdp`, the SDP offer (`recvonly`) as the body and, for live cameras, the `X-API-Key` header. Response `201` has the SDP answer in its body. The `Location` header is the session URL. End the session with `DELETE <Location>`. Sessions expire after a dozen or so seconds without traffic. `404` means nobody is streaming on the path. Retry with backoff from 2 s to 30 s. Do not retry every second.
 
