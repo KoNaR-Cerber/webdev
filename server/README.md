@@ -17,8 +17,9 @@ dron DJI        --RTMP :1935 (internet, login+hasło)-->          --RTSP :8554 (
 | `video/dji01` | dron DJI Mavic 3M (operator w terenie) | RTMP | login i hasło z `.env` |
 | `video/dji01/demo`, `video/normal_cam/demo` | ffmpeg w kontenerze (`mediamtx-demo.sh`, `runOnInit`) | SRT z localhost | tylko z wnętrza kontenera; z zewnątrz odrzucane |
 
-Odczyt każdej ścieżki jest publiczny (decyzja z 2026-10-31, jak telemetria): przeglądarka nie potrafi trzymać
-sekretu, a adresy i tak są w bundlu frontendu. Prefiks `video/` jest wspólny, bo reverse proxy kieruje `/video/*`
+MediaMTX sam nie wymaga uwierzytelnienia do odczytu; dostęp ogranicza Caddy (decyzja z 2026-11-02): ścieżki
+`*/demo` publicznie bez klucza, kamery na żywo z internetu tylko z nagłówkiem `X-API-Key` (ten sam klucz co
+telemetria, sprawdzany przez gateway przez `forward_auth`), z VPN bez klucza. Prefiks `video/` jest wspólny, bo reverse proxy kieruje `/video/*`
 do MediaMTX; dzięki temu nowa ścieżka nie wymaga zmian w Caddy.
 
 ## Adresy
