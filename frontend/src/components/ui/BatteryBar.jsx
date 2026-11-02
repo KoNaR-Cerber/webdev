@@ -1,5 +1,3 @@
-import React from 'react';
-
 const BatteryBar = ({ label, percentage }) => {
     // Fallback to 0 if undefined
     const level = percentage || 0; 

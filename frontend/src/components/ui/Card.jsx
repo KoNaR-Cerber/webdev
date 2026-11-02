@@ -1,7 +1,6 @@
 //   
 //  This is the element for the different widget cards
 // 
-import React from 'react';
 
 const Card = ({ title, children }) => {
     return (

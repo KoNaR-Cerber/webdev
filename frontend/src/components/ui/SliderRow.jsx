@@ -1,5 +1,3 @@
-import React from "react";
-
 const SliderRow = ({ label, value, min, max, step, onChange }) => {
     return (
         <div style={{ marginBottom: '12px' }}>

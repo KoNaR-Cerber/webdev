@@ -1,12 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import Card from './Card';
+import { CAMERA_IP } from '../../utils/apiConfig';
 
 const WebRTCCamera = ({ title, streamPath }) => {
     const videoRef = useRef(null);
     const peerConnection = useRef(null);
 
     useEffect(() => {
-        const whepUrl = `https://10.13.13.1/${streamPath}/whep`;
+        const whepUrl = `https://${CAMERA_IP}/${streamPath}/whep`;
 
         const startStream = async () => {
             peerConnection.current = new RTCPeerConnection();
