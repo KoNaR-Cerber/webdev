@@ -179,9 +179,7 @@ Video format: H.264. Browsers receive no audio. The drone sends AAC. WebRTC does
 
 `GET /api/v1/robots/{robot_id}/streams` returns the same WHEP URLs for robot cameras. `whep_url` is relative to the API host. `vpn_only` is a configuration flag and does not reflect network state. It is currently `false`.
 
-## 5. Publishing video
-
-### DJI drone: RTMP from the internet
+## 5. Drone video publishing (RTMP)
 
 | Setting | Value |
 |---|---|
@@ -197,14 +195,6 @@ ffmpeg -re -f lavfi -i testsrc2=size=1280x720:rate=30 -c:v libx264 -preset ultra
   -g 60 -pix_fmt yuv420p -b:v 2000k -an -f flv "rtmp://cerber.machinekind.ai:1935/video/dji01?user=$U&pass=$P"
 ```
 
-### Robot: VPN only
-The robot and server share a NetBird VPN network. The addresses below are not reachable from the internet. The server VPN address `<SERVER_VPN_ADDR>` and network invitation are supplied separately.
-
-| What | Where to | Format |
-|---|---|---|
-| cameras | `srt://<SERVER_VPN_ADDR>:18890?streamid=publish:video/normal_cam&pkt_size=1316`; same for `video/IR_cam` | MPEG-TS/H.264 over SRT, no password |
-| GPS | MQTT `<SERVER_VPN_ADDR>:11883`, topic `cerber/gps/data` | JSON: `latitude`, `longitude` in degrees; `date` in ISO 8601 UTC; optional `altitude`, `satellites`, `fix_quality` |
-| ROS 2 telemetry | The robot exposes rosbridge over WebSocket on port 9090 in the VPN. The gateway connects to it. | Topics: `/imu/data`, `/joint_states`, `/leg_odom2`, `/us_publisher/ultrasound_distance`, `/ptz/status`, `/sensor_status/*_isalive` |
 ## 6. Contract and package
 Contents of `cerber-public-api-<date>.zip`:
 

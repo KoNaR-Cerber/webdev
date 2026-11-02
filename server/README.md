@@ -36,6 +36,17 @@ Dla hosta `cerber.example.org` (przykład) i domyślnych portów:
 Login i hasło idą w query RTMP, bo aplikacja DJI ma jedno pole na adres. MediaMTX nie loguje query, więc hasło
 nie trafia do `docker logs`. Nie przesyłaj tego adresu kanałem, który zostaje w historii (np. publiczny czat).
 
+## Wejścia od robota (tylko VPN)
+
+Robot i serwer są w jednej sieci NetBird; te adresy nie są osiągalne z internetu. `<SERVER_VPN_ADDR>` to adres serwera
+w VPN (nie trzymamy go w repo).
+
+| Co | Dokąd | Format |
+|---|---|---|
+| kamery | `srt://<SERVER_VPN_ADDR>:18890?streamid=publish:video/normal_cam&pkt_size=1316` (analogicznie `video/IR_cam`) | MPEG-TS/H.264 po SRT, bez hasła |
+| GPS | MQTT `<SERVER_VPN_ADDR>:11883`, topic `cerber/gps/data` | JSON: `latitude`, `longitude` (stopnie), `date` (ISO 8601 UTC), opcjonalnie `altitude`, `satellites`, `fix_quality` |
+| telemetria ROS 2 | robot wystawia rosbridge (WebSocket, port 9090) w VPN; gateway łączy się sam (`ROSBRIDGE_HOST` w `.env`) | tematy: `/imu/data`, `/joint_states`, `/leg_odom2`, `/us_publisher/ultrasound_distance`, `/ptz/status`, `/sensor_status/*_isalive` |
+
 ## Strumienie demo
 
 Do pokazów bez sprzętu. Każda ścieżka `video/<kamera>/demo` ma własny proces ffmpeg uruchamiany przez MediaMTX
