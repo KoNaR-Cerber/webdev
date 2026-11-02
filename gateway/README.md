@@ -99,7 +99,7 @@ idą na stdout od razu (bez buforowania), także bez `PYTHONUNBUFFERED`. `rosbri
 WebSocket z rosbridge (samo połączenie TCP to za mało).
 
 Zmienne: `ROBOT_ID` (`cerber-lite3-01`), `ROBOT_MODEL`, `API_KEY` (wymagany — bez niego aplikacja nie wystartuje), `ROSBRIDGE_HOST/PORT`, `MQTT_HOST/PORT`, `MQTT_GPS_TOPIC`,
-`MEDIAMTX_BASE` (pusty — whep_url względne), `STREAMS_VPN_ONLY` (1), `STALE_AFTER_S` (5 — po tylu sekundach bez wiadomości ROS robot jest
+`MEDIAMTX_BASE` (pusty — whep_url względne), `PUBLIC_BASE_URL` (pusty — gdy ustawiony, np. `https://host`, trafia do `servers` w `/openapi.json`; w compose z `GATEWAY_PUBLIC_URL`), `STREAMS_VPN_ONLY` (1), `STALE_AFTER_S` (5 — po tylu sekundach bez wiadomości ROS robot jest
 offline), `WS_THROTTLE_S` (1.0 — najwyżej jedna ramka WS na typ zdarzenia na tyle sekund; `0` wyłącza),
 `WS_HEARTBEAT_S` (5 — co tyle sekund `status` do każdego klienta WS; `0` = tylko przy zmianach), `ROSBRIDGE_FAST_RETRY_S` (300) / `ROSBRIDGE_SLOW_RETRY_S` (60 — fazy
 ponawiania połączenia z rosbridge),

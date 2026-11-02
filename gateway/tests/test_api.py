@@ -101,6 +101,9 @@ def test_close_codes_documented(client):
     assert {"4401", "4404", "1008", "1009", "1011", "1013"} <= set(ws_doc["closeCodes"])
     assert "keepalive" not in ws_doc and ws_doc["status"]["heartbeat_s"] == main.WS_HEARTBEAT_S
     assert "ping`" not in ws_doc["description"] and "WS_HEARTBEAT_S" in ws_doc["description"]
+    # opis bez wciec niezaleznie od wersji Pythona (3.13+ dedentuje docstringi, 3.12 nie)
+    assert not any(line.startswith(" ") for line in ws_doc["description"].splitlines())
+    assert "servers" not in client.get("/openapi.json").json()  # PUBLIC_BASE_URL nieustawiony w testach
 
 
 def test_ptz_drops_ip():

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import inspect
 import math
 import os
 import random
@@ -61,6 +62,7 @@ MQTT_HOST = os.getenv("MQTT_HOST", "10.13.13.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_GPS_TOPIC = os.getenv("MQTT_GPS_TOPIC", "cerber/gps/data")
 MEDIAMTX_BASE = os.getenv("MEDIAMTX_BASE", "").rstrip("/")  # pusta = whep_url wzgledne: /video/<cam>/whep
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")  # np. https://host; pusta = brak `servers` w OpenAPI
 STALE_AFTER_S = float(os.getenv("STALE_AFTER_S", "5"))
 WS_THROTTLE_S = float(os.getenv("WS_THROTTLE_S", "1.0"))  # max 1 ramka WS na tyle sekund na typ; 0 = bez
 WS_HEARTBEAT_S = float(os.getenv("WS_HEARTBEAT_S", "5"))  # status do kazdego klienta co tyle; 0 = tylko zmiany
@@ -621,7 +623,9 @@ async def gps_latest(robot_id: str) -> GPSFix:
 
 @app.get("/api/v1/robots/{robot_id}/streams", response_model=VideoStreamList, tags=["video"],
          dependencies=[Depends(require_key)], responses=COMMON_ERRORS,
-         summary="Strumienie wideo (WHEP, tylko z VPN)")
+         summary="Strumienie wideo robota (WHEP)",
+         description="Adresy WHEP kamer robota. Odtwarzanie jest poza tym API (POST SDP offer na whep_url, bez klucza). "
+                     "`vpn_only` to flaga z konfiguracji gatewaya (STREAMS_VPN_ONLY), nie stan sieci.")
 async def streams(robot_id: str) -> VideoStreamList:
     get_robot(robot_id)
     return VideoStreamList(streams=[
@@ -716,6 +720,8 @@ def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
     schema = FastAPI.openapi(app)
+    if PUBLIC_BASE_URL:
+        schema["servers"] = [{"url": PUBLIC_BASE_URL}]
     schema["components"]["schemas"].update({
         "TelemetryEventEnvelope": TelemetryEventEnvelope.model_json_schema(
             ref_template="#/components/schemas/{model}"
@@ -726,7 +732,8 @@ def custom_openapi():
         schema["components"]["schemas"].setdefault(name, sub)
     schema["x-websockets"] = {
         "/api/v1/robots/{robot_id}/telemetry/stream": {
-            "description": telemetry_stream.__doc__.strip(),
+            # cleandoc, nie strip: Python >= 3.13 sam usuwa wciecie docstringa, 3.12 nie - kontrakt ma byc identyczny
+            "description": inspect.cleandoc(telemetry_stream.__doc__ or ""),
             "query": {"api_key": "string, wymagany"},
             "closeCodes": {
                 "4401": "zly klucz (po accept)", "4404": "nieznany robot_id (po accept)",
@@ -747,9 +754,9 @@ def custom_openapi():
         "ApiKey": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
     }
     for path, ops in schema["paths"].items():
-        if path.startswith("/api/"):
-            for op in ops.values():
-                op["security"] = [{"ApiKey": []}]
+        for op in ops.values():
+            # /health jawnie bez klucza (security: []), reszta z kluczem
+            op["security"] = [{"ApiKey": []}] if path.startswith("/api/") else []
     app.openapi_schema = schema
     return schema
 
