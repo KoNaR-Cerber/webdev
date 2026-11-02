@@ -10,3 +10,6 @@ postman
 # nagrania demo (duze pliki), trzymane poza repo
 /server/media/*
 !/server/media/.gitkeep
+
+# paczki dla zespolow (scripts/package-public-api.sh)
+/dist/

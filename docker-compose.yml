@@ -66,6 +66,8 @@ services:
       - MQTT_PORT=1883
       # baza adresow WHEP w /streams; pusta = sciezki wzgledne (/video/<cam>/whep) na tym samym hoscie co API
       - MEDIAMTX_BASE=${MEDIAMTX_BASE:-}
+      # publiczny adres API (https://host) do pola `servers` w /openapi.json; pusty = bez `servers`
+      - PUBLIC_BASE_URL=${GATEWAY_PUBLIC_URL:-}
       - STREAMS_VPN_ONLY=${STREAMS_VPN_ONLY:-1}
     depends_on:
       - mosquitto
