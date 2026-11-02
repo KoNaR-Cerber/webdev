@@ -1,4 +1,4 @@
-import React, {
+import {
   createContext,
   useContext,
   useState,
@@ -7,6 +7,8 @@ import React, {
   useRef,
 } from "react";
 import * as ROSLIB from "roslib";
+
+import { ROS_HOST, ROS_PORT } from "../utils/apiConfig";
 
 const RobotContext = createContext();
 
@@ -27,9 +29,8 @@ export const RobotProvider = ({ children }) => {
   useEffect(() => {
     const isSecure = window.location.protocol === "https:";
     const protocol = isSecure ? "wss" : "ws";
-    const rosURL = `${protocol}://${window.location.host}/rosbridge`; // Adjust path if your rosbridge is served differently
+    const rosURL = `${protocol}://${ROS_HOST}:${ROS_PORT}/rosbridge`;
     console.log(`Attempting to connect to ROS at ${rosURL}...`);
-    setConnectionStatus("CONNECTING");
     const rosClient = new ROSLIB.Ros({
       url: rosURL,
     });
@@ -102,4 +103,5 @@ export const RobotProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useRobot = () => useContext(RobotContext);
