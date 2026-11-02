@@ -1,3 +1,6 @@
+// 
+// To be removed?
+// 
 import React, { useEffect, useRef, useCallback } from 'react';
 import nipplejs from 'nipplejs';
 import { useRobot } from '../../context/RobotContext';

@@ -2,11 +2,14 @@
 // TO BE CHANGED INTO A MAP?? -- YES
 // 
 
-import React, { useState, useEffect} from "react";
+import { useState, useEffect} from "react";
 import { MapContainer, useMap, TileLayer, Popup, Marker } from "react-leaflet";
-
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+import L from 'leaflet';
+
+import { API_BASE_URL } from "../../utils/apiConfig";
+
 let DefaultIcon = L.icon({
     iconUrl: icon,
     shadowUrl: iconShadow,
@@ -27,7 +30,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
             <MapContainer center={[50.5, 30.5]} zoom={13} style={{ height: '100%', width: '100%' }}>
                 <TileLayer
                             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                            url="https://{s}.tile.openstreetmap.org/{z}/{y}/{x}.png"
+                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         />
                 <MakeDogMap />
                 <Marker position={[50.5, 30.5]}>
@@ -57,7 +60,7 @@ const GpsWidget = () => {
     useEffect(() => {
         const fetchGpsData = async () => {
             try {
-                const response = await fetch('http://localhost:3000/api/v1/gps/data');
+                const response = await fetch(`${API_BASE_URL}/api/v1/gps/data`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
                 }

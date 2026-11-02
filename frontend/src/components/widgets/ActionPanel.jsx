@@ -1,5 +1,5 @@
 // Stand up, sit down and etc
-import React, { useEffect, useState, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useRobot } from "../../context/RobotContext";
 import { useTeleopControls } from "../../hooks/useTeleopControls";
 import TeleopButton from "../ui/TeleopButton";

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRobot } from '../../context/RobotContext';
 import { useTeleopControls } from '../../hooks/useTeleopControls';
 import TeleopButton from '../ui/TeleopButton';
@@ -46,7 +46,7 @@ const PanTiltWidget = () => {
         }, 100);
 
         return () => clearInterval(intervalId);
-    }, [sendCommand, isConnected]);
+    }, [sendCommand, isConnected, speeds.camera]);
 
     // 2. Status Subscriber Effect
     useEffect(() => {

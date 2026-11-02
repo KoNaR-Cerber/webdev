@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useRobot } from "../../context/RobotContext";
 import { useTeleopControls } from "../../hooks/useTeleopControls";
 import TeleopButton from "../ui/TeleopButton";
