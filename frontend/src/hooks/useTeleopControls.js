@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, act } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 export const useTeleopControls = (keyMapping) => {
     const [activeKeys, setActiveKeys] = useState({});
