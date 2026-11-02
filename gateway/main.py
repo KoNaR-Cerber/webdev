@@ -41,6 +41,7 @@ from contextlib import asynccontextmanager, suppress
 from typing import Any, Dict, Optional, Set
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, status
+from fastapi.middleware.cors import CORSMiddleware
 
 import logs
 from logs import DropLog, log, why
@@ -570,6 +571,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.add_middleware(KeepTransport)
+# CORS: klienci przegladarkowi z innych originow (X-API-Key wymusza preflight OPTIONS). Bez cookies,
+# wiec "*" jest bezpieczne; klucz i tak jest wymagany na kazdym zadaniu.
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"],
+                   allow_headers=["X-API-Key"], max_age=600)
 
 
 def key_ok(key: str) -> bool:

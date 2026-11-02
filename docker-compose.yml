@@ -19,6 +19,8 @@ services:
       # publiczny adres (IP lub nazwa) serwera dla kandydatow ICE; lista po przecinku
       - MTX_WEBRTCADDITIONALHOSTS=${WEBRTC_ADDITIONAL_HOSTS}
       # login i haslo nadawcy drona (wpis nr 2 w authInternalUsers w server/mediamtx.yml); oba wymagane
+      # skad robot moze publikowac bez hasla (wpis nr 1): CIDR-y po przecinku, np. siec VPN; domyslnie tylko localhost
+      - MTX_AUTHINTERNALUSERS_1_IPS=${ROBOT_PUBLISH_IPS:-127.0.0.1,::1}
       - MTX_AUTHINTERNALUSERS_2_USER=${DJI_PUBLISH_USER:?set DJI_PUBLISH_USER in .env}
       - MTX_AUTHINTERNALUSERS_2_PASS=${DJI_PUBLISH_PASS:?set DJI_PUBLISH_PASS in .env}
       # wyjscie RTSP (yes/no)

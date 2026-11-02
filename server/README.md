@@ -12,14 +12,23 @@ dron DJI        --RTMP :1935 (internet, login+hasło)-->          --RTSP :8554 (
 
 | Ścieżka | Nadawca | Wejście | Publikowanie |
 |---|---|---|---|
-| `video/normal_cam` | robot | SRT | bez hasła; port SRT jest dostępny tylko z VPN (firewall serwera) |
+| `video/normal_cam` | robot | SRT | bez hasła, ale tylko z adresów z `ROBOT_PUBLISH_IPS` (`.env`, sieć VPN); poza tym firewall zamyka SRT dla świata |
 | `video/IR_cam` | robot | SRT | jak wyżej |
 | `video/dji01` | dron DJI Mavic 3M (operator w terenie) | RTMP | login i hasło z `.env` |
 | `video/dji01/demo`, `video/normal_cam/demo` | ffmpeg w kontenerze (`mediamtx-demo.sh`, `runOnInit`) | SRT z localhost | tylko z wnętrza kontenera; z zewnątrz odrzucane |
 
-Odczyt każdej ścieżki jest publiczny (decyzja z 2026-10-31, jak telemetria): przeglądarka nie potrafi trzymać
-sekretu, a adresy i tak są w bundlu frontendu. Prefiks `video/` jest wspólny, bo reverse proxy kieruje `/video/*`
-do MediaMTX; dzięki temu nowa ścieżka nie wymaga zmian w Caddy.
+MediaMTX sam nie wymaga uwierzytelnienia do odczytu; dostęp ogranicza Caddy (decyzja z 2026-11-02): ścieżki
+`*/demo` publicznie bez klucza, kamery na żywo z internetu tylko z nagłówkiem `X-API-Key` (ten sam klucz co
+telemetria, sprawdzany przez gateway przez `forward_auth`), z VPN bez klucza. Prefiks `video/` jest wspólny, bo reverse proxy kieruje `/video/*`
+do MediaMTX; dzięki temu nowa ścieżka nie wymaga zmian w Caddy. Preflight CORS (`OPTIONS`) na `/video/*` przechodzi bez klucza,
+a Caddy dopisuje `X-API-Key` do `Access-Control-Allow-Headers`, żeby odtwarzacze w przeglądarce z innych originów mogły wysłać klucz.
+
+Lista `ips` we wpisie nr 1 `authInternalUsers` jest jedyną blokadą publikowania bez hasła na kamery robota: RTMP na 1935
+jest publiczny i używa tych samych uprawnień, więc bez niej każdy z internetu mógłby podmienić obraz kamery (luka
+znaleziona 2026-11-02). Plik ma tylko localhost; sieć VPN dopisuje `.env` przez `ROBOT_PUBLISH_IPS`.
+
+Backend (`/api/*` poza trasami gateway) i dashboard są w Caddy dostępne tylko z VPN: jego `GET`-y (`/api/v1/mqtt/gps`,
+`/api/v1/mqtt/topics`, `/api/v1/ros/status`) nie mają klucza i omijałyby klucz gateway.
 
 ## Adresy
 
@@ -35,6 +44,17 @@ Dla hosta `cerber.example.org` (przykład) i domyślnych portów:
 
 Login i hasło idą w query RTMP, bo aplikacja DJI ma jedno pole na adres. MediaMTX nie loguje query, więc hasło
 nie trafia do `docker logs`. Nie przesyłaj tego adresu kanałem, który zostaje w historii (np. publiczny czat).
+
+## Wejścia od robota (tylko VPN)
+
+Robot i serwer są w jednej sieci NetBird; te adresy nie są osiągalne z internetu. `<SERVER_VPN_ADDR>` to adres serwera
+w VPN (nie trzymamy go w repo).
+
+| Co | Dokąd | Format |
+|---|---|---|
+| kamery | `srt://<SERVER_VPN_ADDR>:18890?streamid=publish:video/normal_cam&pkt_size=1316` (analogicznie `video/IR_cam`) | MPEG-TS/H.264 po SRT, bez hasła |
+| GPS | MQTT `<SERVER_VPN_ADDR>:11883`, topic `cerber/gps/data` | JSON: `latitude`, `longitude` (stopnie), `date` (ISO 8601 UTC), opcjonalnie `altitude`, `satellites`, `fix_quality` |
+| telemetria ROS 2 | robot wystawia rosbridge (WebSocket, port 9090) w VPN; gateway łączy się sam (`ROSBRIDGE_HOST` w `.env`) | tematy: `/imu/data`, `/joint_states`, `/leg_odom2`, `/us_publisher/ultrasound_distance`, `/ptz/status`, `/sensor_status/*_isalive` |
 
 ## Strumienie demo
 
@@ -54,6 +74,7 @@ Pliki w `server/media/` nie trafiają do repo (`.gitignore`); na serwer wgrywa s
 | Zmienna | Znaczenie | Domyślnie |
 |---|---|---|
 | `SRT_PORT`, `WEBRTC_PORT`, `STREAM_PORT`, `WEBRTC_ADDITIONAL_HOSTS` | jak dotąd (SRT, sygnalizacja WHEP, port ICE 1:1, publiczny adres dla ICE) | wymagane |
+| `ROBOT_PUBLISH_IPS` | adresy/CIDR-y po przecinku, z których robot publikuje bez hasła na `video/normal_cam` i `video/IR_cam` (wpis nr 1 `authInternalUsers`, `MTX_AUTHINTERNALUSERS_1_IPS`); wpisz sieć VPN | `127.0.0.1,::1` (robot nie opublikuje) |
 | `DJI_PUBLISH_USER`, `DJI_PUBLISH_PASS` | login i hasło nadawcy na `video/dji01`; trafiają do wpisu nr 2 `authInternalUsers` przez `MTX_AUTHINTERNALUSERS_2_*` | **wymagane** — compose odmawia startu bez nich |
 | `RTMP_PORT` | port RTMP na hoście | `1935` |
 | `RTSP_ENABLE` | `yes` włącza nasłuch RTSP (odczyt, tylko TCP) | `no` |
@@ -67,7 +88,8 @@ które nadpisuje compose; sprawdzono, że bez nadpisania strumień z tym hasłem
 
 Do tej pory z internetu otwarte były tylko porty Caddy i port ICE (`STREAM_PORT`, TCP+UDP). Dron nadaje z LTE,
 więc **`RTMP_PORT`/TCP musi być otwarty publicznie** — stąd hasło. `RTSP_PORT`/TCP otwieraj tylko, gdy RTSP ma być
-używane spoza serwera. SRT zostaje zamknięte dla świata (robot nadaje przez VPN). MediaMTX nie ma ochrony przed
+używane spoza serwera. SRT zostaje zamknięte dla świata (robot nadaje przez VPN), a dodatkowo `ROBOT_PUBLISH_IPS`
+ogranicza publikowanie bez hasła do VPN także na publicznym RTMP. MediaMTX nie ma ochrony przed
 zgadywaniem haseł; nieudane próby widać w logu jako `failed to authenticate`.
 
 ## Testy bez drona
@@ -90,7 +112,7 @@ Potem `https://cerber.example.org/video/dji01/` w przeglądarce. OBS: Ustawienia
 klucz z tabeli wyżej.
 
 Zweryfikowane lokalnie (MediaMTX v1.21.3): RTMP z poprawnym hasłem publikuje; złe hasło, zaślepka z `mediamtx.yml`
-i brak loginu dostają `authentication failed`; SRT bez hasła nadal publikuje na `video/normal_cam`, ale nie na
+i brak loginu dostają `authentication failed`; SRT bez hasła z adresu z `ROBOT_PUBLISH_IPS` nadal publikuje na `video/normal_cam`, ale nie na
 `video/dji01`; przy `RTSP_ENABLE=no` port 8554 odmawia połączeń, przy `yes` ffmpeg czyta H264+AAC po TCP;
 przeglądarka odtwarza `video/dji01` przez WHEP.
 

@@ -1,15 +1,23 @@
 # Cerber public API for the robot and the drone
 Robot telemetry uses REST and WebSocket. Robot and drone camera video uses WebRTC. All services use `cerber.machinekind.ai`. The API key is supplied separately.
 
+| Resource | URL |
+|---|---|
+| OpenAPI contract | https://cerber.machinekind.ai/openapi.json |
+| Swagger UI | https://cerber.machinekind.ai/docs |
+| Health | https://cerber.machinekind.ai/health |
+| Demo stream, drone | https://cerber.machinekind.ai/video/dji01/demo/ |
+| Demo stream, robot camera | https://cerber.machinekind.ai/video/normal_cam/demo/ |
+
 ```
                         https://cerber.machinekind.ai
   /health, /api/v1/robots/*  ──► telemetry gateway (REST, WS; API key)
-  /video/<path>/whep         ──► MediaMTX (WebRTC/WHEP; no key)
+  /video/<path>/whep         ──► MediaMTX (WebRTC/WHEP; API key, demo without)
   /docs, /openapi.json       ──► interactive docs and OpenAPI 3.1 contract
 ```
 
 Rules:
-- The API is read-only. It exposes no robot or drone controls. Telemetry requires an API key. Camera video is public and requires no key.
+- The API is read-only. It exposes no robot or drone controls. Telemetry and live camera video require the API key. Demo streams require no key.
 - The dashboard at `/` requires the project VPN. Public services are the telemetry API, `/docs`, `/openapi.json` and `/video/*`.
 - This is a staging environment for demos. The robot is online only during tests and demos. The `*/demo` streams always run.
 - The contract, JSON schemas and examples are generated from the code and versioned with it.
@@ -22,6 +30,8 @@ Rules:
 | WebSocket | query parameter `?api_key=<key>`; browsers cannot set the header |
 
 A wrong or missing key returns `401 {"detail": "..."}` on REST. On WS, the server accepts the connection and immediately closes it with `4401`. Keep the key out of repositories, logs and public chats. Leaked keys are rotated and replacements supplied. Do not put the key in REST query strings.
+
+Browser clients: CORS is open for every origin on REST and on WHEP. The `X-API-Key` header triggers a preflight `OPTIONS`, which passes without a key. The key is visible in developer tools, so a public web application should keep it on its own backend.
 
 ## 2. Robot telemetry: REST
 Base URL: `https://cerber.machinekind.ai`. Robot ID: `cerber-lite3-01`. `/api/v1/robots` lists all robots.
@@ -135,45 +145,54 @@ asyncio.run(main())
 In a browser, use `new WebSocket(url)`. Read `JSON.parse(e.data).event` in `onmessage`. The WS URL key is visible in browser developer tools. For public applications, keep the WS connection on the backend and send your own stream to the browser.
 
 ## 4. Camera video: WebRTC (WHEP)
-Playback is public and requires no key. Each camera is a MediaMTX path under `/video/`:
+Each camera is a MediaMTX path under `/video/`. Live cameras require the API key, the same one as telemetry. Demo streams require no key.
 
-| Path | Source | Availability |
-|---|---|---|
-| `video/normal_cam` | robot RGB camera | while the robot streams |
-| `video/IR_cam` | robot thermal camera | while the robot streams |
-| `video/dji01` | DJI Mavic 3M drone | while the operator streams |
-| `video/normal_cam/demo` | test pattern or looped recording | always |
-| `video/dji01/demo` | test pattern or looped recording | always |
+| Path | Source | Availability | Key |
+|---|---|---|---|
+| `video/normal_cam` | robot RGB camera | while the robot streams | required |
+| `video/IR_cam` | robot thermal camera | while the robot streams | required |
+| `video/dji01` | DJI Mavic 3M drone | while the operator streams | required |
+| `video/normal_cam/demo` | test pattern or looped recording | always | none |
+| `video/dji01/demo` | test pattern or looped recording | always | none |
 
-Use the built-in player at `https://cerber.machinekind.ai/video/dji01/demo/`, including inside an `<iframe>`. For WHEP playback in your application, send `POST https://cerber.machinekind.ai/video/<path>/whep` with `Content-Type: application/sdp` and the SDP offer (`recvonly`) as the body. Response `201` has the SDP answer in its body. The `Location` header is the session URL. End the session with `DELETE <Location>`. Sessions expire after a dozen or so seconds without traffic. `404` means nobody is streaming on the path. Retry with backoff from 2 s to 30 s. Do not retry every second.
+### Demo streams
+
+`video/normal_cam/demo` and `video/dji01/demo` run 24/7 without hardware. Each shows a test pattern, or a looped recording when one is installed. They have the same codec, latency and WHEP flow as the live cameras. Use them to build and test your player. Open `https://cerber.machinekind.ai/video/dji01/demo/` in a browser to see one now.
+
+### Authentication for live cameras
+
+Send `X-API-Key: <key>` on every request to a live camera path: the WHEP `POST`, and the `PATCH` and `DELETE` on the session URL. Missing or wrong key returns `401`. The built-in player page cannot send the header, so from the internet it works only for demo streams. Media packets (ICE, DTLS, SRTP) carry no key. From a browser on another origin, the preflight `OPTIONS` needs no key and `X-API-Key` is an allowed header.
+
+Use the built-in player at `https://cerber.machinekind.ai/video/<path>/demo/`, including inside an `<iframe>`. For WHEP playback in your application, send `POST https://cerber.machinekind.ai/video/<path>/whep` with `Content-Type: application/sdp`, the SDP offer (`recvonly`) as the body and, for live cameras, the `X-API-Key` header. Response `201` has the SDP answer in its body. The `Location` header is the session URL. End the session with `DELETE <Location>`. Sessions expire after a dozen or so seconds without traffic. `404` means nobody is streaming on the path. Retry with backoff from 2 s to 30 s. Do not retry every second.
 
 ```js
-async function playWhep(video, path) {
+async function playWhep(video, path, apiKey) {   // apiKey: undefined for */demo
+  const headers = { "Content-Type": "application/sdp" };
+  if (apiKey) headers["X-API-Key"] = apiKey;
   const pc = new RTCPeerConnection();
   pc.addTransceiver("video", { direction: "recvonly" });
   pc.ontrack = (e) => { video.srcObject = e.streams[0]; };
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   const res = await fetch(`https://cerber.machinekind.ai/${path}/whep`, {
-    method: "POST", headers: { "Content-Type": "application/sdp" }, body: offer.sdp,
+    method: "POST", headers, body: offer.sdp,
   });
   if (res.status === 404) throw new Error("no stream");           // nobody is streaming
   const session = new URL(res.headers.get("Location"), res.url);  // for DELETE on close
   await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
-  return () => { fetch(session, { method: "DELETE", keepalive: true }); pc.close(); };
+  return () => { fetch(session, { method: "DELETE", headers, keepalive: true }); pc.close(); };
 }
-playWhep(document.querySelector("video"), "video/dji01/demo");
+playWhep(document.querySelector("video"), "video/dji01/demo");            // demo, no key
+playWhep(document.querySelector("video"), "video/dji01", CERBER_KEY);      // live camera
 ```
 
 Allow HTTPS on port 443 and media over UDP or TCP to port 18189 on the server. Media connects directly to the server's public IP address from ICE candidates and bypasses HTTP proxies. STUN and TURN are not required. Networks that block outbound UDP use TCP with slightly higher latency. Each WHEP viewer uses a separate WebRTC session on the server.
 
 Video format: H.264. Browsers receive no audio. The drone sends AAC. WebRTC does not carry it. Recording, HLS and RTSP are not publicly available.
 
-`GET /api/v1/robots/{robot_id}/streams` returns the same WHEP URLs for robot cameras. `whep_url` is relative to the API host. `vpn_only` is a configuration flag and does not reflect network state. It is currently `false`.
+`GET /api/v1/robots/{robot_id}/streams` returns the same WHEP URLs for robot cameras. `whep_url` is relative to the API host. `vpn_only` is a configuration flag and does not reflect network state. It is currently `false`. Live paths from `/streams` need the `X-API-Key` header.
 
-## 5. Publishing video
-
-### DJI drone: RTMP from the internet
+## 5. Drone video publishing (RTMP)
 
 | Setting | Value |
 |---|---|
@@ -189,14 +208,6 @@ ffmpeg -re -f lavfi -i testsrc2=size=1280x720:rate=30 -c:v libx264 -preset ultra
   -g 60 -pix_fmt yuv420p -b:v 2000k -an -f flv "rtmp://cerber.machinekind.ai:1935/video/dji01?user=$U&pass=$P"
 ```
 
-### Robot: VPN only
-The robot and server share a NetBird VPN network. The addresses below are not reachable from the internet. The server VPN address `<SERVER_VPN_ADDR>` and network invitation are supplied separately.
-
-| What | Where to | Format |
-|---|---|---|
-| cameras | `srt://<SERVER_VPN_ADDR>:18890?streamid=publish:video/normal_cam&pkt_size=1316`; same for `video/IR_cam` | MPEG-TS/H.264 over SRT, no password |
-| GPS | MQTT `<SERVER_VPN_ADDR>:11883`, topic `cerber/gps/data` | JSON: `latitude`, `longitude` in degrees; `date` in ISO 8601 UTC; optional `altitude`, `satellites`, `fix_quality` |
-| ROS 2 telemetry | The robot exposes rosbridge over WebSocket on port 9090 in the VPN. The gateway connects to it. | Topics: `/imu/data`, `/joint_states`, `/leg_odom2`, `/us_publisher/ultrasound_distance`, `/ptz/status`, `/sensor_status/*_isalive` |
 ## 6. Contract and package
 Contents of `cerber-public-api-<date>.zip`:
 

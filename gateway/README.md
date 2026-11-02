@@ -26,6 +26,7 @@ Regeneracja po zmianie modeli: `python export_contract.py`.
 | Metoda | Ścieżka | Zwraca |
 | --- | --- | --- |
 | GET | `/health` | `Health` — stan połączeń z rosbridge i MQTT (bez klucza) |
+| OPTIONS | `/api/v1/*` | preflight CORS (`CORSMiddleware`: każdy origin, metoda GET, nagłówek `X-API-Key`), bez klucza |
 | GET | `/api/v1/robots` | `RobotList` |
 | GET | `/api/v1/robots/{robot_id}` | `RobotSummary` (`online` i `last_seen` jak w `status`, patrz niżej) |
 | GET | `/api/v1/robots/{robot_id}/telemetry/latest` | `TelemetrySnapshot` — ostatni znany stan, sekcje `null` dopóki nie przyjdą; pole `status` z chwili odpowiedzi |
