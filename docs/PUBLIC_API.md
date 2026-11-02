@@ -197,7 +197,7 @@ playWhep(document.querySelector("video"), "video/dji01/demo");
 ```
 
 Wymagania sieciowe po stronie klienta: oprócz HTTPS/443 ruch mediów idzie **UDP lub TCP na port 18189**
-serwera (kandydaci ICE wskazują publiczny adres serwera, STUN/TURN nie jest potrzebny). Sieci firmowe
+serwera, wprost na jego publiczny adres IP z kandydatów ICE (z pominięciem proxy HTTP; STUN/TURN nie jest potrzebny). Sieci firmowe
 blokujące UDP wychodzący działają po TCP, z nieco większym opóźnieniem.
 
 Format: H.264, bez dźwięku w przeglądarce (dron nadaje AAC, którego WebRTC nie przenosi). Zapis, HLS
@@ -213,17 +213,19 @@ nie stan sieci; obecnie `false`.
 
 | | |
 |---|---|
-| adres | `rtmp://cerber.example.org:1935/video/dji01?user=<login>&pass=<hasło>` |
-| aplikacje z dwoma polami (DJI Fly / Pilot, OBS) | URL `rtmp://cerber.example.org:1935/video`, klucz strumienia `dji01?user=<login>&pass=<hasło>` |
+| adres | `rtmp://rtmp.cerber.example.org:1935/video/dji01?user=<login>&pass=<hasło>` |
+| aplikacje z dwoma polami (DJI Fly / Pilot, OBS) | URL `rtmp://rtmp.cerber.example.org:1935/video`, klucz strumienia `dji01?user=<login>&pass=<hasło>` |
 | kodek | H.264, odstęp klatek kluczowych ≤ 2 s, bez B-klatek; bitrate według łącza LTE |
 | dźwięk | przyjmowany, ale nie trafia do przeglądarki |
 
-Login i hasło przekazujemy osobno; jedno nadawanie na raz (drugi nadawca na tę samą ścieżkę jest odrzucany).
+RTMP idzie na osobną nazwę `rtmp.cerber.example.org` (wskazuje wprost na serwer, bez proxy HTTP przed główną
+nazwą, które nie przenosi RTMP). Login i hasło przekazujemy osobno; jedno nadawanie na raz (drugi nadawca na tę
+samą ścieżkę jest odrzucany).
 RTMPS nie jest obecnie skonfigurowane. Test bez drona (dowolna maszyna z ffmpeg):
 
 ```bash
 ffmpeg -re -f lavfi -i testsrc2=size=1280x720:rate=30 -c:v libx264 -preset ultrafast -tune zerolatency \
-  -g 60 -pix_fmt yuv420p -b:v 2000k -an -f flv "rtmp://cerber.example.org:1935/video/dji01?user=$U&pass=$P"
+  -g 60 -pix_fmt yuv420p -b:v 2000k -an -f flv "rtmp://rtmp.cerber.example.org:1935/video/dji01?user=$U&pass=$P"
 ```
 
 ### Robot — tylko przez VPN
