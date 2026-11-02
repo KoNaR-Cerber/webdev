@@ -1,6 +1,14 @@
 # Cerber public API for the robot and the drone
 Robot telemetry uses REST and WebSocket. Robot and drone camera video uses WebRTC. All services use `cerber.machinekind.ai`. The API key is supplied separately.
 
+| Resource | URL |
+|---|---|
+| OpenAPI contract | https://cerber.machinekind.ai/openapi.json |
+| Swagger UI | https://cerber.machinekind.ai/docs |
+| Health | https://cerber.machinekind.ai/health |
+| Demo stream, drone | https://cerber.machinekind.ai/video/dji01/demo/ |
+| Demo stream, robot camera | https://cerber.machinekind.ai/video/normal_cam/demo/ |
+
 ```
                         https://cerber.machinekind.ai
   /health, /api/v1/robots/*  ──► telemetry gateway (REST, WS; API key)
