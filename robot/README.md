@@ -1,15 +1,16 @@
-# Cerber: telemetria i wbudowana kamera
+# Cerber: telemetria, wbudowana kamera i GPS
 
-Źródła i szablony konfiguracji z uruchomienia Lite3 na Jetsonie 2026-11-02.
+Źródła i szablony konfiguracji z uruchomienia Lite3 na Jetsonie 2026-11-02–03.
 To dokumentacja istniejącego wdrożenia, nie automatyczny instalator robota.
 Adresy urządzeń, sieć VPN i dane dostępowe należy ustawić lokalnie.
 
 - [telemetry](telemetry/README.md): odbiornik UDP, publikacja ROS 2 i ograniczony
   rosbridge do odczytu;
 - [camera](camera/README.md): wbudowana kamera RTSP przesyłana do serwera mediów;
+- [gps](gps/README.md): Quectel GNSS, publikator C i przesyłanie pozycji przez MQTT;
 - [live-panel](../live-panel/README.md): lokalny podgląd publicznego API.
 
-## Stan potwierdzony podczas uruchomienia
+## Stan potwierdzony podczas uruchomienia 2026-11-02
 
 Na Jetsonie działały trzy usługi systemd z włączonym autostartem:
 
@@ -32,6 +33,36 @@ wdrożenia i mają jawnie konfigurowalne parametry zamiast lokalnych adresów.
 
 Oryginalny kontener ROS oraz pliki firmware pozostawiono bez zmian. Nowe
 kontenery nie uruchamiają sterowników ruchu ani polityki sterowania.
+
+## Uzupełnienie 2026-11-03: źródło GPS i publikator
+
+Źródłem GPS jest moduł USB Quectel EG25, a nie telemetria kontrolera Lite3
+ani wbudowany odbiornik Jetsona. Repo firmware zawierało źródła C
+`Interp4GPSComm`, ale brakowało uruchomionego publikatora. Jego dotychczasowe
+nazwy pól JSON i adres brokera wymagały dostosowania do obecnego API.
+
+Wdrożono osobny, przetestowany `robot_gps` w `/opt/cerber-gps/` i usługę
+`cerber-gps.service` z autostartem. Konfiguracja jest w `/etc/cerber/gps.env`,
+dostępna tylko dla roota. Oryginalny firmware zachowano, a jego źródła GPS
+i konfigurację skopiowano i zweryfikowano na Jetsonie przed wdrożeniem.
+
+Potwierdzono odbiór NMEA, połączenie MQTT przez VPN i poprawny restart samej
+usługi GPS. Parser, obsługa portu szeregowego i pełna ścieżka publikacji
+przeszły trzy zestawy testów na Jetsonie; testy używały wyłącznie prywatnych
+pseudoterminali i lokalnego brokera. Nowa usługa czyta interfejs NMEA IF01
+i korzysta z wolnego dodatkowego portu AT IF03; nie zajmuje IF02 używanego
+przez ModemManager.
+
+Podczas sprawdzania antena pozostawała w pomieszczeniu: moduł zgłaszał
+`no_fix` i 0 używanych satelitów. Nie wysłano współrzędnych, a API nadal
+nie miało pozycji GPS. Rzeczywisty fix, dobór anteny i cała ścieżka pozycji
+do API wymagają potwierdzenia przy dostępie anteny do otwartego nieba.
+Publikator wysyła wyłącznie kompletną świeżą pozycję z datą UTC.
+
+Po ponownym uruchomieniu Jetsona i przywróceniu kabla Ethernet trzy usługi
+kamery i telemetrii ponownie działały; po wdrożeniu GPS pozostały aktywne,
+a API raportowało działające połączenia rosbridge i MQTT. Nie wykonano
+pełnego zimnego startu z nowo dodanym publikatorem GPS.
 
 ## Sieć i adres odbiorcy telemetrii
 
@@ -74,11 +105,12 @@ ręcznym restarcie robota wykonanym przez operatora w pozycji spoczynkowej.
 
 ## Następna weryfikacja na urządzeniu
 
-1. Sprawdzić `systemctl is-enabled` i `systemctl is-active` dla trzech usług.
+1. Po kolejnym starcie sprawdzić `systemctl is-enabled` i `systemctl is-active`
+   dla czterech usług, w tym `cerber-gps`.
 2. Po kontrolowanym zimnym starcie potwierdzić Ethernet, VPN, powrót kamery
    oraz świeże próbki wszystkich czterech źródeł telemetrii w panelu.
-3. Sprawdzić źródło GPS i tor MQTT; samo połączenie brokera nie oznacza,
-   że odbiornik GNSS publikuje lokalizację.
+3. Przy antenie na zewnątrz potwierdzić rzeczywisty fix i świeże `gps_at`
+   w API; samo połączenie brokera nie oznacza poprawnej lokalizacji.
 4. Zidentyfikować zasilacz, płytkę Jetsona i wyjście robota oraz zmierzyć
    napięcie i polaryzację przewodu przed zmianą sposobu zasilania.
 
