@@ -887,6 +887,7 @@
             "odometry",
             "ultrasound",
             "gps",
+            "gps_receiver",
             "ptz",
             "sensors_alive",
           ])
@@ -901,6 +902,7 @@
             "odometry",
             "ultrasound",
             "gps",
+            "gps_receiver",
             "ptz",
             "sensors_alive",
           ].includes(e.type)
@@ -965,12 +967,8 @@
             ["x", "y", "z"].map((k) => fmt(od.position?.[k], 3)).join(" / ") +
             " m"
           : "Pozycja XYZ: brak danych";
-        const gps = state.gps;
-        $("#gps-fix").textContent = gps ? gpsLabel(gps) : "Brak danych";
-        $("#gps-position").textContent = gps
-          ? fmt(gps.latitude, 6) + "°, " + fmt(gps.longitude, 6) + "°"
-          : "Oczekiwanie na odbiornik GNSS";
-        renderMap(gps);
+        renderGps();
+        renderMap(state.gps);
         $("#battery").textContent = finite(state.battery_percent)
           ? fmt(state.battery_percent, 0) + " %"
           : "Brak danych";
@@ -1145,6 +1143,27 @@
           );
         }
       }
+      function renderGps() {
+        const gps = state.gps,
+          rx = state.gps_receiver,
+          rxAge = finite(times.gps_receiver) ? Date.now() / 1000 - times.gps_receiver : null,
+          rxLive = rx && rxAge !== null && rxAge < 20;
+        $("#gps-fix").textContent = gps
+          ? gpsLabel(gps)
+          : rxLive
+            ? (rx.fix ? "Fix" : "Bez fixu") + " · " + rx.satellites + " sat."
+            : "Brak danych";
+        $("#gps-position").textContent = gps
+          ? fmt(gps.latitude, 6) + "°, " + fmt(gps.longitude, 6) + "°"
+          : receiverLabel(rx, rxAge);
+      }
+      function receiverLabel(rx, age) {
+        if (!rx) return "Oczekiwanie na odbiornik GNSS";
+        if (age === null || age >= 20)
+          return "Odbiornik: brak kontaktu" + (age === null ? "" : " od " + Math.floor(age) + " s");
+        if (!rx.nmea_alive) return "Odbiornik działa, brak zdań NMEA z modułu";
+        return rx.fix ? "Odbiornik ma fix, pozycja w drodze" : "Odbiornik działa · czeka na satelity";
+      }
       function gpsLabel(gps) {
         const radius = finite(gps.accuracy_m) ? " ±" + fmt(gps.accuracy_m, 0) + " m" : "";
         if (gps.source === "wifi") return "Wi‑Fi" + radius;
@@ -1211,6 +1230,7 @@
                   ? "Teraz"
                   : age.toFixed(1) + " s temu";
         }
+        if (!state.gps) renderGps(); // wiek statusu odbiornika zmienia sie bez zdarzen
         $("#video-clock").textContent = new Date().toLocaleTimeString("pl-PL");
       }
       async function cleanupVideo() {

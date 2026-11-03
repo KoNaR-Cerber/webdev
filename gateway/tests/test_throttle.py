@@ -87,6 +87,7 @@ def test_types_independent_and_all_throttled(env):
         ptz(0.0, c.PtzState.WAITING),
         c.SensorsAliveEvent(robot_id="r1", ts=0.0, data=c.SensorsAlive(imu=True)),
         c.GpsEvent(robot_id="r1", ts=0.0, data=main.gps_from_mqtt({"latitude": 51.1, "longitude": 17.0})),
+        c.GpsReceiverEvent(robot_id="r1", ts=0.0, data=c.GpsReceiver(fix=False, satellites=0, nmea_alive=True, published=0)),
     ]
     assert {e.type for e in events} == set(main.THROTTLED)
     for _ in range(10):

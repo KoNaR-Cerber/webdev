@@ -49,7 +49,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logs
 from logs import DropLog, log, why
 from contracts import (
-    API_VERSION, Error, GPSFix, GpsEvent, Health, Imu, ImuEvent, Joints, JointsEvent,
+    API_VERSION, Error, GPSFix, GpsEvent, GpsReceiver, GpsReceiverEvent, Health, Imu, ImuEvent, Joints, JointsEvent,
     Odometry, OdometryEvent, Ptz, PtzEvent, PtzState, Quaternion, RobotList, RobotStatus, RobotSummary,
     SensorsAlive, SensorsAliveEvent, SnapshotEvent, StatusEvent, TelemetryEventEnvelope,
     TelemetrySnapshot, UltrasoundEvent, Vec3, VideoStream, VideoStreamList,
@@ -65,6 +65,7 @@ ROSBRIDGE_PORT = int(os.getenv("ROSBRIDGE_PORT", "9090"))
 MQTT_HOST = os.getenv("MQTT_HOST", "10.13.13.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_GPS_TOPIC = os.getenv("MQTT_GPS_TOPIC", "cerber/gps/data")
+MQTT_GPS_STATUS_TOPIC = os.getenv("MQTT_GPS_STATUS_TOPIC", "cerber/gps/status")  # stan odbiornika GNSS (bez pozycji)
 GPS_GNSS_HOLD_S = float(os.getenv("GPS_GNSS_HOLD_S", "60"))  # tyle po fixie gnss pozycje zastepcze (wifi/cell) sa pomijane
 MEDIAMTX_BASE = os.getenv("MEDIAMTX_BASE", "").rstrip("/")  # pusta = whep_url wzgledne: /video/<cam>/whep
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")  # np. https://host; pusta = brak `servers` w OpenAPI
@@ -116,7 +117,7 @@ SENSOR_ALIVE_KEYS = {
     "/sensor_status/ultrasound_isalive": "ultrasound",
 }
 VIDEO_STREAMS = [("normal_cam", "video/normal_cam"), ("IR_cam", "video/IR_cam")]
-THROTTLED = ("imu", "joints", "odometry", "ultrasound", "ptz", "sensors_alive", "gps")  # bez snapshot i status
+THROTTLED = ("imu", "joints", "odometry", "ultrasound", "ptz", "sensors_alive", "gps", "gps_receiver")  # bez snapshot i status
 
 
 logs.install(API_KEY)  # klucz z query WS nie moze trafic do logow uvicorna
@@ -174,6 +175,21 @@ def gps_from_mqtt(m: Dict[str, Any]) -> GPSFix:
         altitude=m.get("altitude", 0.0), satellites=m.get("satellites", 0),
         fix_quality=m.get("fix_quality", 0), source=m.get("source", "gnss"), accuracy_m=m.get("accuracy_m"),
     )
+
+
+def gps_receiver_from_mqtt(m: Dict[str, Any]) -> GpsReceiver:
+    return GpsReceiver(fix=m["fix"], satellites=m.get("satellites", 0), nmea_alive=m.get("nmea_alive", False),
+                       published=m.get("published", 0))
+
+
+def mqtt_event(robot_id: str, topic: str, payload: bytes):
+    """Wiadomosc MQTT -> zdarzenie wg tematu (pozycja albo stan odbiornika). ValueError/KeyError/ValidationError
+    dla zlych danych - wolajacy je liczy i pomija."""
+    data = json.loads(payload.decode())
+    now = time.time()
+    if topic == MQTT_GPS_STATUS_TOPIC:
+        return GpsReceiverEvent(robot_id=robot_id, ts=now, data=gps_receiver_from_mqtt(data))
+    return GpsEvent(robot_id=robot_id, ts=now, data=gps_from_mqtt(data))
 
 
 # --- stan + rozglaszanie ---------------------------------------------------
@@ -260,7 +276,7 @@ class RobotState:
         kind = event.type
         if kind == "gps" and self.gnss_holds(event.data, now):
             return  # pozycja zastepcza nie nadpisuje swiezego fixu gnss (i nie idzie do klientow)
-        if kind != "gps":
+        if kind not in ("gps", "gps_receiver"):
             self.last_seen = now
             if not self._status_key[0]:
                 self.check_status()  # pierwsza wiadomosc ROS po ciszy -> online od razu
@@ -278,6 +294,8 @@ class RobotState:
             s.ptz, s.ptz_at = event.data, now
         elif kind == "gps":
             s.gps, s.gps_at = event.data, now
+        elif kind == "gps_receiver":
+            s.gps_receiver, s.gps_receiver_at = event.data, now
         elif kind == "sensors_alive":
             s.sensors_alive = event.data
 
@@ -503,13 +521,13 @@ async def mqtt_task(robot: RobotState) -> None:
                 mqtt_connected = True
                 robot.check_status()
                 await client.subscribe(MQTT_GPS_TOPIC)
+                await client.subscribe(MQTT_GPS_STATUS_TOPIC)
                 async for msg in client.messages:
+                    topic = str(msg.topic)
                     try:
-                        data = json.loads(msg.payload.decode())
-                        robot.apply(GpsEvent(robot_id=robot.snapshot.robot_id, ts=time.time(),
-                                             data=gps_from_mqtt(data)))
+                        robot.apply(mqtt_event(robot.snapshot.robot_id, topic, msg.payload))
                     except Exception as ex:
-                        dropped(MQTT_GPS_TOPIC, ex)
+                        dropped(topic, ex)
         except asyncio.CancelledError:
             raise
         except Exception as ex:

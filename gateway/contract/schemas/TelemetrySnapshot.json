@@ -81,6 +81,43 @@
       "title": "GPSFix",
       "type": "object"
     },
+    "GpsReceiver": {
+      "additionalProperties": false,
+      "description": "Z MQTT cerber/gps/status: stan odbiornika GNSS na robocie, co 5 s, takze bez fixu.\nPozwala odroznic 'czeka na satelity' od 'publikator nie dziala' (wtedy gps_receiver_at przestaje rosnac).",
+      "properties": {
+        "fix": {
+          "description": "Czy odbiornik ma w tej chwili wazny fix",
+          "title": "Fix",
+          "type": "boolean"
+        },
+        "satellites": {
+          "description": "Satelity sledzone wg ostatniego GGA",
+          "maximum": 255,
+          "minimum": 0,
+          "title": "Satellites",
+          "type": "integer"
+        },
+        "nmea_alive": {
+          "description": "Czy z modulu plyna zdania NMEA (ostatnie 5 s)",
+          "title": "Nmea Alive",
+          "type": "boolean"
+        },
+        "published": {
+          "description": "Fixy wyslane od startu publikatora",
+          "minimum": 0,
+          "title": "Published",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "fix",
+        "satellites",
+        "nmea_alive",
+        "published"
+      ],
+      "title": "GpsReceiver",
+      "type": "object"
+    },
     "Imu": {
       "additionalProperties": false,
       "description": "Z /imu/data (sensor_msgs/Imu).",
@@ -542,6 +579,30 @@
       ],
       "default": null,
       "title": "Gps At"
+    },
+    "gps_receiver": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GpsReceiver"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "gps_receiver_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "epoch [s] odbioru ostatniego statusu odbiornika GNSS",
+      "title": "Gps Receiver At"
     },
     "sensors_alive": {
       "$ref": "#/$defs/SensorsAlive"
