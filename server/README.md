@@ -106,6 +106,13 @@ Pliki w `server/media/` nie trafiają do repo (`.gitignore`); na serwer wgrywa s
 Hasło: coś losowego, np. `openssl rand -base64 24`. Wartości w `mediamtx.yml` (`dji` / `set-in-env`) to zaślepki,
 które nadpisuje compose; sprawdzono, że bez nadpisania strumień z tym hasłem jest odrzucany.
 
+## Wdrożenie na serwerze
+
+Stack staging stoi w `/opt/stacks/webdev-staging` (checkout gałęzi `staging` forka) za Caddy spoza repo.
+Narzędzia w [scripts/server](../scripts/server/README.md): `deploy-staging.sh` (pobranie gałęzi, `.env`,
+`compose up --build`) i `caddy-panel-password.sh` (hasło do panelu podglądu). Wzór naszego vhosta Caddy, z
+placeholderami zamiast adresów VPN, jest w [caddy/Caddyfile.example](caddy/Caddyfile.example).
+
 ## Firewall serwera
 
 Do tej pory z internetu otwarte były tylko porty Caddy i port ICE (`STREAM_PORT`, TCP+UDP). Dron nadaje z LTE,
