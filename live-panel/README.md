@@ -61,6 +61,39 @@ Nie zapisujemy nagrań. Po rozłączeniu panel ponawia połączenie.
 - GPS, bateria, PTZ i zbiorcze statusy czujników mogą być niedostępne niezależnie
   od działającej kamery, IMU i stawów.
 
+## Na serwerze (za Caddy)
+
+W `docker-compose.yml` jest serwis `live-panel` (obraz z `Dockerfile`, bez portów na hoście). Dostaje klucz
+z `GATEWAY_API_KEY` i rozmawia po sieci wewnętrznej: telemetria z `http://gateway:8000`, sygnalizacja WHEP
+z `http://mediamtx:8889`. Obraz (ICE) idzie jak dotąd wprost z MediaMTX do przeglądarki. Caddy kieruje `/`,
+`/events`, `/whep`, `/session/*` i `/health-local` do `cerber-<projekt>-live-panel:8765` i nadaje hasło:
+
+```caddyfile
+handle {
+    basic_auth bcrypt "Cerber" {
+        obserwator <hash z: docker exec -i caddy caddy hash-password>
+    }
+    reverse_proxy cerber-staging-live-panel:8765
+}
+```
+
+Zmienne serwera (wszystkie poza kluczem opcjonalne):
+
+| Zmienna | Znaczenie | Domyślnie |
+|---|---|---|
+| `CERBER_API_KEY` | klucz API gatewaya | wymagany |
+| `CERBER_API_ORIGIN` | origin API (WebSocket telemetrii) | `https://cerber.machinekind.ai` |
+| `CERBER_VIDEO_ORIGIN` | origin MediaMTX (POST/DELETE WHEP) | jak `CERBER_API_ORIGIN` |
+| `CERBER_ROBOT_ID` | robot w strumieniu telemetrii | `cerber-lite3-01` |
+| `CERBER_PANEL_HOSTS` | nazwy `host[:port]` z przeglądarki (po przecinku); ustawione = nasłuch na `0.0.0.0` | puste (tylko `127.0.0.1:port`) |
+| `CERBER_PANEL_BIND` | adres nasłuchu | `0.0.0.0` gdy `CERBER_PANEL_HOSTS`, inaczej `127.0.0.1` |
+| `CERBER_PANEL_MAX_VIEWERS` | jednoczesne karty i sesje kamery (1–64) | `8` |
+| `CERBER_PANEL_PORT` | port nasłuchu | `8765` |
+
+Żądanie z innym nagłówkiem `Host` lub `Origin` niż z listy dostaje 403. Przejście z linku na innej stronie
+(nawigacja) działa; żądania cross-site inne niż nawigacja (fetch, EventSource, formularz) są odrzucane.
+Hasło sprawdza Caddy, nie panel; panel ufa, że przed nim stoi tylko reverse proxy.
+
 ## Sprawdzenie
 
 ```sh
@@ -75,4 +108,5 @@ robota, działającego odbiornika/rosbridge i strumienia kamery po stronie serwe
 - `public/index.html` — interfejs, wykresy i klient WebRTC;
 - `server.mjs` — lokalny serwer, uwierzytelnienie API i przekazywanie zdarzeń;
 - `server.test.mjs` — testy serwera;
+- `Dockerfile` — obraz dla serwisu `live-panel` w `docker-compose.yml`;
 - `.env.example` — konfiguracja bez credentiali.

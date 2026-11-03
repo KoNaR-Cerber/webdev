@@ -1,0 +1,6 @@
+.env
+.env.*
+!.env.example
+server.test.mjs
+README.md
+node_modules

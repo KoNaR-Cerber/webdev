@@ -74,7 +74,27 @@ services:
     depends_on:
       - mosquitto
     restart: always
+  live-panel:
+    # Panel podgladu (read-only) pod / na publicznym hoscie. Haslo (basic_auth) i TLS daje Caddy; klucz API
+    # zostaje w tym kontenerze. Telemetrie bierze z gatewaya, sygnalizacje WHEP z MediaMTX po sieci wewnetrznej,
+    # media (ICE) ida jak dotad wprost z MediaMTX do przegladarki. Bez portow na hoscie: dostep tylko przez Caddy.
+    build: ./live-panel
+    container_name: ${PROJECT_NAME}-live-panel
+    environment:
+      - CERBER_API_KEY=${GATEWAY_API_KEY}
+      - CERBER_API_ORIGIN=http://gateway:8000
+      - CERBER_VIDEO_ORIGIN=http://mediamtx:8889
+      - CERBER_ROBOT_ID=${PANEL_ROBOT_ID:-cerber-lite3-01}
+      # nazwy hostow, pod ktorymi przegladarka otwiera panel (naglowek Host przekazany przez Caddy); po przecinku
+      - CERBER_PANEL_HOSTS=${PANEL_HOSTS:-cerber.machinekind.ai}
+      # jednoczesne karty/kamery (kazda karta = jedna sesja WHEP w MediaMTX)
+      - CERBER_PANEL_MAX_VIEWERS=${PANEL_MAX_VIEWERS:-8}
+    depends_on:
+      - gateway
+      - mediamtx
+    restart: always
   frontend:
+    # Dashboard teleoperacji; bundle budowany pod /teleop/ (base we vite.config.js), Caddy serwuje go z VPN.
     build: ./frontend
     container_name: ${PROJECT_NAME}-frontend
     volumes:

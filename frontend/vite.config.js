@@ -4,7 +4,10 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
-plugins: [react()],
+  // Dashboard jest serwowany pod /teleop/ (Caddy, handle_path); / zajmuje panel podgladu (live-panel).
+  // Wywolania /api/*, /video/* i /rosbridge w kodzie sa absolutne, wiec base dotyczy tylko bundla i index.html.
+  base: '/teleop/',
+  plugins: [react()],
   resolve: {
     dedupe: ['react', 'react-dom'], 
   },

@@ -27,8 +27,11 @@ Lista `ips` we wpisie nr 1 `authInternalUsers` jest jedyną blokadą publikowani
 jest publiczny i używa tych samych uprawnień, więc bez niej każdy z internetu mógłby podmienić obraz kamery (luka
 znaleziona 2026-11-02). Plik ma tylko localhost; sieć VPN dopisuje `.env` przez `ROBOT_PUBLISH_IPS`.
 
-Backend (`/api/*` poza trasami gateway) i dashboard są w Caddy dostępne tylko z VPN: jego `GET`-y (`/api/v1/mqtt/gps`,
-`/api/v1/mqtt/topics`, `/api/v1/ros/status`) nie mają klucza i omijałyby klucz gateway.
+Backend (`/api/*` poza trasami gateway) i dashboard teleoperacji (`/teleop/`) są w Caddy dostępne tylko z VPN: `GET`-y
+backendu (`/api/v1/mqtt/gps`, `/api/v1/mqtt/topics`, `/api/v1/ros/status`) nie mają klucza i omijałyby klucz gateway.
+Pod `/` jest panel podglądu (`live-panel`, serwis w `docker-compose.yml`): tylko odczyt, z internetu, za hasłem
+w przeglądarce (`basic_auth` w Caddy). Panel sam trzyma klucz API i rozmawia z gatewayem oraz MediaMTX po sieci
+wewnętrznej, więc przeglądarka obserwatora nie dostaje klucza. Konfiguracja w [live-panel/README.md](../live-panel/README.md).
 
 ## Adresy
 
@@ -80,6 +83,9 @@ Pliki w `server/media/` nie trafiają do repo (`.gitignore`); na serwer wgrywa s
 | `RTSP_ENABLE` | `yes` włącza nasłuch RTSP (odczyt, tylko TCP) | `no` |
 | `RTSP_PORT` | port RTSP na hoście; mapowany zawsze, ale przy `RTSP_ENABLE=no` nic w kontenerze nie słucha | `18554` |
 | `DEMO_STREAMS` | `no` wyłącza strumienie `video/*/demo` | `yes` |
+| `PANEL_HOSTS` | nazwy hostów (po przecinku), pod którymi przeglądarka otwiera panel podglądu `/`; inny nagłówek `Host` dostaje 403 | `cerber.machinekind.ai` |
+| `PANEL_ROBOT_ID` | robot pokazywany w panelu podglądu | `cerber-lite3-01` |
+| `PANEL_MAX_VIEWERS` | jednoczesne karty panelu (każda = jedna sesja WHEP) | `8` |
 
 Hasło: coś losowego, np. `openssl rand -base64 24`. Wartości w `mediamtx.yml` (`dji` / `set-in-env`) to zaślepki,
 które nadpisuje compose; sprawdzono, że bez nadpisania strumień z tym hasłem jest odrzucany.
