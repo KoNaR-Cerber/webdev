@@ -1,0 +1,20 @@
+# Copy to /etc/cerber/wifi-locator.env on the Jetson (root-owned, mode 0600).
+# Google Cloud API key restricted to the Geolocation API. Never commit a real key.
+CERBER_WIFI_GOOGLE_API_KEY=
+# MQTT broker reachable over the VPN: literal IP of the server, port, topic (same as the GNSS publisher).
+CERBER_WIFI_MQTT_HOST=
+CERBER_WIFI_MQTT_PORT=1883
+CERBER_WIFI_MQTT_TOPIC=cerber/gps/data
+# Optional: VPN source address to bind outgoing MQTT connections to.
+#CERBER_WIFI_MQTT_SOURCE_IP=
+# Optional: Wi-Fi interface to scan on (default: every Wi-Fi device NetworkManager knows).
+#CERBER_WIFI_INTERFACE=wlan0
+# Scan cadence and Geolocation API quota guard (seconds). With the defaults a parked robot
+# costs ~144 queries/day, a moving one at most 720/day. Google's free tier is 10 000/month.
+CERBER_WIFI_SCAN_INTERVAL_S=30
+CERBER_WIFI_MIN_QUERY_INTERVAL_S=120
+CERBER_WIFI_MAX_QUERY_INTERVAL_S=600
+# Estimates with a larger error radius are not published; fewer visible networks are not queried.
+CERBER_WIFI_MAX_ACCURACY_M=500
+CERBER_WIFI_MIN_APS=3
+CERBER_WIFI_MAX_APS=15

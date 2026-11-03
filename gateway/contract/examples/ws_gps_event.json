@@ -9,7 +9,9 @@
       "longitude": 17.038538,
       "altitude": 118.4,
       "satellites": 9,
-      "fix_quality": 1
+      "fix_quality": 1,
+      "source": "gnss",
+      "accuracy_m": null
     }
   }
 }

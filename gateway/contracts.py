@@ -93,6 +93,13 @@ class GPSFix(Strict):
     altitude: float = Field(description="Wysokosc [m n.p.m.]")
     satellites: int = Field(ge=0, le=255)
     fix_quality: int = Field(ge=0, description="NMEA GGA: 0 brak fixu, 1 GPS, 2 DGPS, 4 RTK fix, 5 RTK float")
+    source: Literal["gnss", "wifi", "cell"] = Field(
+        default="gnss",
+        description="Skad pozycja: gnss = odbiornik satelitarny, wifi = geolokalizacja po sieciach Wi-Fi "
+                    "(satellites 0, fix_quality 0), cell = po stacji bazowej. Zrodla zastepcze sa pomijane, "
+                    "dopoki jest swiezy fix gnss")
+    accuracy_m: Optional[float] = Field(
+        default=None, ge=0, description="Szacowany promien bledu [m] (zrodla zastepcze); brak dla gnss")
 
 
 class SensorsAlive(Strict):
