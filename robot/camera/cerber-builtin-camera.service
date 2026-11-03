@@ -1,0 +1,28 @@
+[Unit]
+Description=Cerber built-in camera RTSP to private SRT
+Wants=network-online.target
+After=network-online.target NetworkManager.service netbird.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=cerber
+Group=cerber
+EnvironmentFile=/etc/cerber/camera.env
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/tmp
+Environment=XDG_CACHE_HOME=/var/cache/cerber-camera
+Environment=GSETTINGS_BACKEND=memory
+CacheDirectory=cerber-camera
+ExecStart=/usr/bin/python3 /opt/cerber-camera/camera_pipeline.py
+Restart=always
+RestartSec=5
+TimeoutStopSec=8
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
