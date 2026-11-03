@@ -65,6 +65,7 @@ ROSBRIDGE_PORT = int(os.getenv("ROSBRIDGE_PORT", "9090"))
 MQTT_HOST = os.getenv("MQTT_HOST", "10.13.13.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_GPS_TOPIC = os.getenv("MQTT_GPS_TOPIC", "cerber/gps/data")
+GPS_GNSS_HOLD_S = float(os.getenv("GPS_GNSS_HOLD_S", "60"))  # tyle po fixie gnss pozycje zastepcze (wifi/cell) sa pomijane
 MEDIAMTX_BASE = os.getenv("MEDIAMTX_BASE", "").rstrip("/")  # pusta = whep_url wzgledne: /video/<cam>/whep
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")  # np. https://host; pusta = brak `servers` w OpenAPI
 STALE_AFTER_S = float(os.getenv("STALE_AFTER_S", "5"))
@@ -171,7 +172,7 @@ def gps_from_mqtt(m: Dict[str, Any]) -> GPSFix:
     return GPSFix(
         time=m.get("date"), latitude=m["latitude"], longitude=m["longitude"],
         altitude=m.get("altitude", 0.0), satellites=m.get("satellites", 0),
-        fix_quality=m.get("fix_quality", 0),
+        fix_quality=m.get("fix_quality", 0), source=m.get("source", "gnss"), accuracy_m=m.get("accuracy_m"),
     )
 
 
@@ -228,6 +229,12 @@ class RobotState:
         return RobotSummary(robot_id=self.snapshot.robot_id, model=ROBOT_MODEL,
                             online=self.online(), last_seen=self.last_seen)
 
+    def gnss_holds(self, fix: GPSFix, now: float) -> bool:
+        """Czy zastepcza pozycja (wifi/cell) ma byc pominieta: ostatni fix gnss jest mlodszy niz GPS_GNSS_HOLD_S."""
+        cur, at = self.snapshot.gps, self.snapshot.gps_at
+        return (fix.source != "gnss" and cur is not None and cur.source == "gnss" and at is not None
+                and now - at < GPS_GNSS_HOLD_S)
+
     def current_snapshot(self) -> TelemetrySnapshot:
         self.snapshot.status = self.status()
         return self.snapshot
@@ -251,6 +258,8 @@ class RobotState:
         zrodla (watek ROS, MQTT) nigdy nie czekaja na siec klientow."""
         now = event.ts
         kind = event.type
+        if kind == "gps" and self.gnss_holds(event.data, now):
+            return  # pozycja zastepcza nie nadpisuje swiezego fixu gnss (i nie idzie do klientow)
         if kind != "gps":
             self.last_seen = now
             if not self._status_key[0]:

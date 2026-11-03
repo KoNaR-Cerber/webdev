@@ -463,6 +463,30 @@
             "minimum": 0.0,
             "title": "Fix Quality",
             "description": "NMEA GGA: 0 brak fixu, 1 GPS, 2 DGPS, 4 RTK fix, 5 RTK float"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "gnss",
+              "wifi",
+              "cell"
+            ],
+            "title": "Source",
+            "description": "Skad pozycja: gnss = odbiornik satelitarny, wifi = geolokalizacja po sieciach Wi-Fi (satellites 0, fix_quality 0), cell = po stacji bazowej. Zrodla zastepcze sa pomijane, dopoki jest swiezy fix gnss",
+            "default": "gnss"
+          },
+          "accuracy_m": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy M",
+            "description": "Szacowany promien bledu [m] (zrodla zastepcze); brak dla gnss"
           }
         },
         "additionalProperties": false,

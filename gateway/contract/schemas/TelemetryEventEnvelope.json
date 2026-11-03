@@ -44,6 +44,31 @@
           "minimum": 0,
           "title": "Fix Quality",
           "type": "integer"
+        },
+        "source": {
+          "default": "gnss",
+          "description": "Skad pozycja: gnss = odbiornik satelitarny, wifi = geolokalizacja po sieciach Wi-Fi (satellites 0, fix_quality 0), cell = po stacji bazowej. Zrodla zastepcze sa pomijane, dopoki jest swiezy fix gnss",
+          "enum": [
+            "gnss",
+            "wifi",
+            "cell"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "accuracy_m": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Szacowany promien bledu [m] (zrodla zastepcze); brak dla gnss",
+          "title": "Accuracy M"
         }
       },
       "required": [

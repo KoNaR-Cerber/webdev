@@ -1,0 +1,29 @@
+[Unit]
+Description=Cerber Wi-Fi fallback position publisher
+Wants=network-online.target netbird.service NetworkManager.service
+After=network-online.target netbird.service NetworkManager.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=cerber
+Group=cerber
+EnvironmentFile=/etc/cerber/wifi-locator.env
+ExecStartPre=/usr/bin/python3 -I /opt/cerber-wifi-locator/wifi_locator.py --check-config
+ExecStart=/usr/bin/python3 -I /opt/cerber-wifi-locator/wifi_locator.py
+Restart=always
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=96M
+TasksMax=16
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

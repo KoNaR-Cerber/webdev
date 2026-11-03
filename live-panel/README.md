@@ -7,7 +7,10 @@ Lokalny panel korzysta z `https://cerber.machinekind.ai` i robota
 - wykresy orientacji, przyspieszenia i prędkości kątowej z ostatnich 60 sekund;
 - pozycje 12 stawów, pogrupowane według nóg;
 - odometrię, odczyt ultradźwięków, status połączenia i wiek danych;
-- GPS oraz stan baterii, jeśli API dostarcza te pola.
+- GPS oraz stan baterii, jeśli API dostarcza te pola; przy pozycji karta z mapą
+  (OpenStreetMap, biblioteka Leaflet z CDN unpkg z podpisem SRI) z promieniem
+  błędu dla szacunków `source: wifi`. Bez dostępu przeglądarki do internetu mapa
+  się nie pokazuje, reszta panelu działa.
 
 Panel służy do podglądu. Nie ma przycisków ani endpointów sterowania robotem.
 

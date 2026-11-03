@@ -13,3 +13,5 @@ postman
 
 # paczki dla zespolow (scripts/package-public-api.sh)
 /dist/
+__pycache__/
+*.pyc

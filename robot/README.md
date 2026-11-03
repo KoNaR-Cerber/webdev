@@ -8,6 +8,8 @@ Adresy urządzeń, sieć VPN i dane dostępowe należy ustawić lokalnie.
   rosbridge do odczytu;
 - [camera](camera/README.md): wbudowana kamera RTSP przesyłana do serwera mediów;
 - [gps](gps/README.md): Quectel GNSS, publikator C i przesyłanie pozycji przez MQTT;
+- [wifi-locator](wifi-locator/README.md): zastępcza pozycja z sieci Wi‑Fi (Google
+  Geolocation API), gdy odbiornik GNSS nie ma fixu;
 - [live-panel](../live-panel/README.md): lokalny podgląd publicznego API.
 
 ## Stan potwierdzony podczas uruchomienia 2026-11-02
@@ -64,6 +66,18 @@ kamery i telemetrii ponownie działały; po wdrożeniu GPS pozostały aktywne,
 a API raportowało działające połączenia rosbridge i MQTT. Nie wykonano
 pełnego zimnego startu z nowo dodanym publikatorem GPS.
 
+## Uzupełnienie 2026-11-03: zastępcza pozycja z Wi‑Fi
+
+W pomieszczeniu odbiornik GNSS nie ma fixu, a API nie ma pozycji. Dodano
+`robot/wifi-locator`: usługa `cerber-wifi-locator.service` skanuje sieci Wi‑Fi
+przez `nmcli`, pyta Google Geolocation API i publikuje szacunek na ten sam temat
+MQTT co publikator GNSS, w formacie `GPSFix` z `source: "wifi"` i promieniem
+błędu `accuracy_m`. Gateway pomija takie próbki, dopóki ma fix GNSS młodszy niż
+60 s, więc prawdziwy odbiornik zawsze wygrywa. Konfiguracja (klucz API, broker)
+jest w `/etc/cerber/wifi-locator.env`, tylko dla roota. Instalacja i sprawdzenie
+ścieżki opisane są w README usługi; wdrożenie na urządzeniu wymaga dostępu do
+Jetsona i klucza Google Cloud ograniczonego do Geolocation API.
+
 ## Sieć i adres odbiorcy telemetrii
 
 Kontroler wysyła pakiety UDP do adresu wskazanego w swoim pliku
@@ -106,7 +120,7 @@ ręcznym restarcie robota wykonanym przez operatora w pozycji spoczynkowej.
 ## Następna weryfikacja na urządzeniu
 
 1. Po kolejnym starcie sprawdzić `systemctl is-enabled` i `systemctl is-active`
-   dla czterech usług, w tym `cerber-gps`.
+   dla pięciu usług, w tym `cerber-gps` i `cerber-wifi-locator`.
 2. Po kontrolowanym zimnym starcie potwierdzić Ethernet, VPN, powrót kamery
    oraz świeże próbki wszystkich czterech źródeł telemetrii w panelu.
 3. Przy antenie na zewnątrz potwierdzić rzeczywisty fix i świeże `gps_at`

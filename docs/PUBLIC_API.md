@@ -42,7 +42,7 @@ Base URL: `https://cerber.machinekind.ai`. Robot ID: `cerber-lite3-01`. `/api/v1
 | GET | `/api/v1/robots` | `RobotList` |
 | GET | `/api/v1/robots/{robot_id}` | `RobotSummary`: `online`, `last_seen` |
 | GET | `/api/v1/robots/{robot_id}/telemetry/latest` | `TelemetrySnapshot` with the last known state of every source |
-| GET | `/api/v1/robots/{robot_id}/gps/latest` | `GPSFix`, or `404` if no position has arrived yet |
+| GET | `/api/v1/robots/{robot_id}/gps/latest` | `GPSFix`, or `404` if no position has arrived yet. Check `source`: `gnss` is the satellite receiver, `wifi` a Wi-Fi based estimate with `accuracy_m` (see below) |
 | GET | `/api/v1/robots/{robot_id}/streams` | `VideoStreamList` with the WHEP URLs of the robot cameras |
 ```bash
 export CERBER_KEY=...   # from the separate channel
@@ -67,7 +67,8 @@ Check `/health` before requesting data. `/health` shows the server state, `onlin
 | `last_seen` | Time of the last robot message, in epoch seconds as a float. |
 | `TelemetrySnapshot` | Sections: `imu`, `joints`, `odometry`, `ultrasound`, `ptz`, `gps`, `sensors_alive`. Each has a receive time `*_at`. Each stays `null` until its data arrives after gateway startup. `status` is computed when the response is built. |
 | `ts`, `*_at`, `last_seen` | Server receive times (epoch). The robot clock is not used. |
-| Units | Angles: radians. Angular velocities: rad/s. Accelerations: m/s². Positions: metres. Velocities: m/s. `ultrasound`: metres. GPS: decimal degrees; altitude: metres. |
+| Units | Angles: radians. Angular velocities: rad/s. Accelerations: m/s². Positions: metres. Velocities: m/s. `ultrasound`: metres. GPS: decimal degrees; altitude: metres; `accuracy_m`: metres. |
+| `gps.source` | `gnss`: position from the satellite receiver (`satellites`, `fix_quality` as in NMEA). `wifi`: estimate from nearby Wi-Fi networks, used indoors where the receiver has no fix; then `satellites` and `fix_quality` are `0`, `altitude` is `0.0` and `accuracy_m` is the error radius in metres (typically 20–100 m). `cell`: reserved for a cell-tower estimate. A `wifi` sample never replaces a GNSS fix younger than 60 s; a GNSS fix replaces a `wifi` estimate at once. Draw `accuracy_m` as a circle, not a point. |
 | `battery_percent` | Currently always `null`. The robot does not publish battery state. |
 
 Shortened `GET /api/v1/robots/cerber-lite3-01/telemetry/latest` example:
@@ -81,7 +82,8 @@ Shortened `GET /api/v1/robots/cerber-lite3-01/telemetry/latest` example:
   "imu_at": 1761487390.996,
   "joints": {"names": ["LF_Joint", "LF_Joint_1", "LF_Joint_2", "..."], "position": [0.0, -0.8, 1.6, "..."]},
   "odometry": {"position": {"x": 12.4, "y": -3.1, "z": 0.33}, "yaw": 0.2, "velocity_body": {"x": 0.5, "y": 0.0, "z": 0.0}, "yaw_rate": 0.05},
-  "gps": {"time": "2026-10-26T14:03:11Z", "latitude": 51.107885, "longitude": 17.038538, "altitude": 118.4, "satellites": 9, "fix_quality": 1},
+  "gps": {"time": "2026-10-26T14:03:11Z", "latitude": 51.107885, "longitude": 17.038538, "altitude": 118.4, "satellites": 9, "fix_quality": 1,
+          "source": "gnss", "accuracy_m": null},
   "status": {"online": true, "last_seen": 1761487390.996, "rosbridge_connected": true, "mqtt_connected": true}
 }
 ```
