@@ -108,12 +108,15 @@ test('one upstream socket serves live SSE and replays snapshot plus the latest e
   assert.match(await first.next(), /"sample":2/);
   sockets[0].message('joints', { angle: 0.5 });
   assert.match(await first.next(), /"type":"joints"/);
+  sockets[0].message('gps_receiver', { fix: false, satellites: 3 });
+  assert.match(await first.next(), /"type":"gps_receiver".*"satellites":3/);
   const second = await events(base);
   t.after(() => second.close());
   assert.match(await second.next(), /event: connection/);
   assert.match(await second.next(), /"type":"snapshot"/);
   assert.match(await second.next(), /"sample":2/);
   assert.match(await second.next(), /"type":"joints"/);
+  assert.match(await second.next(), /"type":"gps_receiver"/);
   assert.equal(sockets.length, 1);
   const health = JSON.parse((await request(base, '/health-local')).body);
   assert.equal(health.viewers, 2);

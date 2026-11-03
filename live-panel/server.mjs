@@ -8,7 +8,7 @@ import { createRecorder } from './recorder.mjs';
 export const DEFAULT_API_ORIGIN = 'https://cerber.machinekind.ai';
 export const DEFAULT_ROBOT_ID = 'cerber-lite3-01';
 const CAMERA_PATH = '/video/normal_cam/whep';
-const EVENT_TYPES = new Set(['snapshot', 'status', 'imu', 'joints', 'odometry', 'ultrasound', 'gps', 'ptz', 'sensors_alive']);
+const EVENT_TYPES = new Set(['snapshot', 'status', 'imu', 'joints', 'odometry', 'ultrasound', 'gps', 'gps_receiver', 'ptz', 'sensors_alive']);
 const MAX_BODY = 65_536;
 const MAX_RESPONSE = 131_072;
 const MAX_BUFFER = 262_144;
