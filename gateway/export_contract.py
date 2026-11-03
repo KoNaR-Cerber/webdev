@@ -20,7 +20,7 @@ from main import app  # noqa: E402
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "contract"
 MODELS = [
-    c.TelemetrySnapshot, c.TelemetryEventEnvelope, c.GPSFix, c.Imu, c.Joints, c.Odometry,
+    c.TelemetrySnapshot, c.TelemetryEventEnvelope, c.GPSFix, c.GpsReceiver, c.Imu, c.Joints, c.Odometry,
     c.Ptz, c.SensorsAlive, c.RobotStatus, c.RobotList, c.RobotSummary, c.VideoStreamList, c.Health, c.Error,
 ]
 

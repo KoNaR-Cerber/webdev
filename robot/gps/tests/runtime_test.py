@@ -193,13 +193,20 @@ def main():
     nmea_master, nmea_slave = pty.openpty()
     at_master, at_slave = pty.openpty()
     broker, modem = Broker(), Modem(at_master)
+
+    def fixes():
+        return [m for m in broker.messages if m[0] == "cerber/gps/data"]
+
+    def statuses():
+        return [m[1] for m in broker.messages if m[0] == "cerber/gps/status"]
+
     process = None
     output = []
     try:
         env = dict(os.environ, GPS_NMEA_DEVICE=os.ttyname(nmea_slave),
                    GPS_AT_DEVICE=os.ttyname(at_slave), GPS_MQTT_HOST="127.0.0.1",
                    GPS_MQTT_BIND_ADDRESS="127.0.0.1", GPS_MQTT_PORT=str(broker.port),
-                   GPS_MQTT_TOPIC="cerber/gps/data")
+                   GPS_MQTT_TOPIC="cerber/gps/data", GPS_MQTT_STATUS_TOPIC="cerber/gps/status")
         process = subprocess.Popen([binary], env=env, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True)
         reader = threading.Thread(target=lambda: output.extend(process.stdout), daemon=True)
@@ -207,17 +214,22 @@ def main():
         wait_for(lambda: any("mqtt_connected awaiting_fresh_fix" in line for line in output))
         assert broker.connections == 1
         assert modem.commands == ["AT+QGPS?", "AT+QGPS=1", "AT+QGPS?"]
+        wait_for(lambda: statuses())  # receiver status right after connecting, without any fix
+        first = statuses()[0]
+        assert set(first) == {"fix", "satellites", "nmea_alive", "published"}
+        assert first["fix"] is False and first["satellites"] == 0 and first["published"] == 0
+        assert all(topic == "cerber/gps/status" for topic, _ in broker.messages)
 
         os.write(nmea_master, sample("120000.00", valid=False))
         time.sleep(0.15)
-        assert not broker.messages, "no-fix input must never publish coordinates"
+        assert not fixes(), "no-fix input must never publish coordinates"
 
         payload = sample("120001.00")
         os.write(nmea_master, payload[:17])
         time.sleep(0.05)
         os.write(nmea_master, payload[17:])
-        wait_for(lambda: len(broker.messages) == 1)
-        topic, fix = broker.messages[0]
+        wait_for(lambda: len(fixes()) == 1)
+        topic, fix = fixes()[0]
         assert topic == "cerber/gps/data"
         assert set(fix) == {"latitude", "longitude", "altitude", "satellites", "fix_quality", "date"}
         assert math.isclose(fix["latitude"], 48.1173, abs_tol=1e-8)
@@ -225,10 +237,11 @@ def main():
         assert fix["altitude"] == 545.4
         assert fix["satellites"] == 8 and fix["fix_quality"] == 1
         assert fix["date"] == "2026-11-03T12:00:01Z"
+        wait_for(lambda: any(s["published"] == 1 and s["satellites"] == 8 and s["nmea_alive"] for s in statuses()))
 
         os.write(nmea_master, sample("120002.00", valid=False))
         time.sleep(0.15)
-        assert len(broker.messages) == 1
+        assert len(fixes()) == 1
         broker.disconnect()
         wait_for(lambda: any("mqtt_disconnected" in line for line in output))
         os.write(nmea_master, sample("120003.00"))
@@ -236,17 +249,17 @@ def main():
         broker.paused = False
         wait_for(lambda: sum("mqtt_connected awaiting_fresh_fix" in line for line in output) == 2)
         time.sleep(0.2)
-        assert len(broker.messages) == 1, "reconnection must not replay an offline fix"
+        assert len(fixes()) == 1, "reconnection must not replay an offline fix"
         os.write(nmea_master, sample("120004.00"))
-        wait_for(lambda: len(broker.messages) == 2)
-        assert broker.messages[1][1]["date"] == "2026-11-03T12:00:04Z"
+        wait_for(lambda: len(fixes()) == 2)
+        assert fixes()[1][1]["date"] == "2026-11-03T12:00:04Z"
 
         process.send_signal(signal.SIGTERM)
         assert process.wait(timeout=3) == 0
         reader.join(timeout=2)
         assert not broker.errors, broker.errors
         assert not modem.errors, modem.errors
-        print("runtime PTY/MQTT: no-fix, canonical fix, reconnect without replay, SIGTERM passed")
+        print("runtime PTY/MQTT: receiver status, no-fix, canonical fix, reconnect without replay, SIGTERM passed")
     except BaseException:
         print("".join(output), file=sys.stderr)
         raise

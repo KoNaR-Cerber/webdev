@@ -76,6 +76,11 @@ camera/telemetry services are unrelated and need not be restarted.
   Invalid RMC or GGA fix zero invalidates the current position. No missing,
   stale or NaN coordinates are replaced with zero; actual geographic zeros
   remain valid.
+- Receiver status on `GPS_MQTT_STATUS_TOPIC` (default `cerber/gps/status`, must
+  differ from the data topic): `{"fix", "satellites", "nmea_alive", "published"}`,
+  right after each (re)connection and then every five seconds, with or without
+  a fix. It carries no coordinates; the API shows it as `gps_receiver`, so the
+  panel can tell "waiting for satellites" from "publisher down".
 - Publish at most once per second, QoS 0, retain false, only when connected and
   a complete fresh fix exists. JSON fields are `latitude`, `longitude`,
   `altitude`, `satellites`, `fix_quality`, `date` (ISO 8601 UTC).

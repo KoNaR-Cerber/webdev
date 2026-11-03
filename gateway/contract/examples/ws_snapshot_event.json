@@ -91,6 +91,8 @@
         "accuracy_m": null
       },
       "gps_at": 1761487390.0,
+      "gps_receiver": null,
+      "gps_receiver_at": null,
       "sensors_alive": {
         "imu": true,
         "odom": true,

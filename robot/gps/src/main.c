@@ -16,7 +16,7 @@
 #include <unistd.h>
 
 typedef struct {
-  const char *nmea, *at, *host, *bind_address, *topic;
+  const char *nmea, *at, *host, *bind_address, *topic, *status_topic;
   int port;
 } config_t;
 typedef struct {
@@ -44,6 +44,8 @@ static int config_read(config_t *c) {
   const char *port = required("GPS_MQTT_PORT");
   c->topic = getenv("GPS_MQTT_TOPIC");
   if (!c->topic || !*c->topic) c->topic = "cerber/gps/data";
+  c->status_topic = getenv("GPS_MQTT_STATUS_TOPIC");
+  if (!c->status_topic || !*c->status_topic) c->status_topic = "cerber/gps/status";
   if (!c->nmea || !c->at || !c->host || !c->bind_address || !port) return -1;
 #ifdef GPS_TEST_DEVICES
   /* Only the separate test binary accepts private pseudo-terminals. */
@@ -75,6 +77,10 @@ static int config_read(config_t *c) {
   }
   if (strlen(c->topic) > 128 || strpbrk(c->topic, "#+\r\n")) {
     fprintf(stderr, "configuration_error field=GPS_MQTT_TOPIC\n"); return -1;
+  }
+  if (strlen(c->status_topic) > 128 || strpbrk(c->status_topic, "#+\r\n") ||
+      !strcmp(c->status_topic, c->topic)) {
+    fprintf(stderr, "configuration_error field=GPS_MQTT_STATUS_TOPIC\n"); return -1;
   }
   return 0;
 }
@@ -167,13 +173,13 @@ int main(int argc, char **argv) {
   atomic_init(&mqtt.connected, false); atomic_init(&mqtt.lost, false); atomic_init(&mqtt.generation, 0);
   gps_parser_t parser; gps_parser_init(&parser);
   char line[512]; size_t line_len = 0; bool discard = false;
-  double last_bytes = gps_monotonic(), report_at = last_bytes, last_publish = -100;
+  double last_bytes = gps_monotonic(), report_at = last_bytes, status_at = last_bytes, last_publish = -100;
   unsigned long long published = 0;
   while (!stopping) {
     double now = gps_monotonic();
     unsigned before_generation = mqtt.seen_generation;
     mqtt_tick(&mqtt, &parser, nmea.fd, now);
-    if (before_generation != mqtt.seen_generation) { line_len = 0; discard = false; }
+    if (before_generation != mqtt.seen_generation) { line_len = 0; discard = false; status_at = now; }
     gps_parser_expire(&parser, now);
     if (now - last_bytes > 30) {
       fprintf(stderr, "nmea_silent timeout_seconds=30\n"); break;
@@ -183,6 +189,23 @@ int main(int argc, char **argv) {
         parser.has_fix ? "valid" : "no_fix", (unsigned long long)parser.nmea_count,
         parser.satellites, atomic_load(&mqtt.connected) ? "true" : "false", published);
       report_at = now + 10;
+    }
+    /* Receiver status for the API: no coordinates, so it goes out even without a fix.
+     * First one right after (re)connecting, then every 5 s. */
+    if (now >= status_at) {
+      status_at = now + 5;
+      if (atomic_load(&mqtt.connected) && !atomic_load(&mqtt.lost) &&
+          mqtt.seen_generation == atomic_load(&mqtt.generation)) {
+        char status[160];
+        int n = snprintf(status, sizeof(status),
+          "{\"fix\":%s,\"satellites\":%d,\"nmea_alive\":%s,\"published\":%llu}",
+          parser.has_fix ? "true" : "false", parser.satellites,
+          now - last_bytes < 5.0 ? "true" : "false", published);
+        if (n > 0 && n < (int)sizeof(status)) {
+          int sent = mosquitto_publish(mqtt.mqtt, NULL, config.status_topic, n, status, 0, false);
+          if (sent != MOSQ_ERR_SUCCESS) fprintf(stderr, "mqtt_status_publish_failed code=%d\n", sent);
+        }
+      }
     }
     struct pollfd p = {.fd = nmea.fd, .events = POLLIN};
     int rc = poll(&p, 1, 100);

@@ -501,6 +501,43 @@
         "title": "GPSFix",
         "description": "Z MQTT cerber/gps/data."
       },
+      "GpsReceiver": {
+        "properties": {
+          "fix": {
+            "type": "boolean",
+            "title": "Fix",
+            "description": "Czy odbiornik ma w tej chwili wazny fix"
+          },
+          "satellites": {
+            "type": "integer",
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Satellites",
+            "description": "Satelity sledzone wg ostatniego GGA"
+          },
+          "nmea_alive": {
+            "type": "boolean",
+            "title": "Nmea Alive",
+            "description": "Czy z modulu plyna zdania NMEA (ostatnie 5 s)"
+          },
+          "published": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Published",
+            "description": "Fixy wyslane od startu publikatora"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fix",
+          "satellites",
+          "nmea_alive",
+          "published"
+        ],
+        "title": "GpsReceiver",
+        "description": "Z MQTT cerber/gps/status: stan odbiornika GNSS na robocie, co 5 s, takze bez fixu.\nPozwala odroznic 'czeka na satelity' od 'publikator nie dziala' (wtedy gps_receiver_at przestaje rosnac)."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1027,6 +1064,28 @@
             ],
             "title": "Gps At"
           },
+          "gps_receiver": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GpsReceiver"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gps_receiver_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gps Receiver At",
+            "description": "epoch [s] odbioru ostatniego statusu odbiornika GNSS"
+          },
           "sensors_alive": {
             "$ref": "#/components/schemas/SensorsAlive"
           },
@@ -1191,6 +1250,7 @@
             "discriminator": {
               "mapping": {
                 "gps": "#/components/schemas/GpsEvent",
+                "gps_receiver": "#/components/schemas/GpsReceiverEvent",
                 "imu": "#/components/schemas/ImuEvent",
                 "joints": "#/components/schemas/JointsEvent",
                 "odometry": "#/components/schemas/OdometryEvent",
@@ -1223,6 +1283,9 @@
               },
               {
                 "$ref": "#/components/schemas/GpsEvent"
+              },
+              {
+                "$ref": "#/components/schemas/GpsReceiverEvent"
               },
               {
                 "$ref": "#/components/schemas/SensorsAliveEvent"
@@ -1267,6 +1330,35 @@
           "data"
         ],
         "title": "GpsEvent",
+        "type": "object"
+      },
+      "GpsReceiverEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "gps_receiver",
+            "default": "gps_receiver",
+            "title": "Type",
+            "type": "string"
+          },
+          "robot_id": {
+            "title": "Robot Id",
+            "type": "string"
+          },
+          "ts": {
+            "title": "Ts",
+            "type": "number"
+          },
+          "data": {
+            "$ref": "#/components/schemas/GpsReceiver"
+          }
+        },
+        "required": [
+          "robot_id",
+          "ts",
+          "data"
+        ],
+        "title": "GpsReceiverEvent",
         "type": "object"
       },
       "ImuEvent": {

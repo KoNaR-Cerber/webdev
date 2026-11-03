@@ -102,6 +102,16 @@ class GPSFix(Strict):
         default=None, ge=0, description="Szacowany promien bledu [m] (zrodla zastepcze); brak dla gnss")
 
 
+class GpsReceiver(Strict):
+    """Z MQTT cerber/gps/status: stan odbiornika GNSS na robocie, co 5 s, takze bez fixu.
+    Pozwala odroznic 'czeka na satelity' od 'publikator nie dziala' (wtedy gps_receiver_at przestaje rosnac)."""
+
+    fix: bool = Field(description="Czy odbiornik ma w tej chwili wazny fix")
+    satellites: int = Field(ge=0, le=255, description="Satelity sledzone wg ostatniego GGA")
+    nmea_alive: bool = Field(description="Czy z modulu plyna zdania NMEA (ostatnie 5 s)")
+    published: int = Field(ge=0, description="Fixy wyslane od startu publikatora")
+
+
 class SensorsAlive(Strict):
     """Z /sensor_status/*_isalive (std_msgs/Bool)."""
 
@@ -148,6 +158,8 @@ class TelemetrySnapshot(Strict):
     ptz_at: Optional[float] = None
     gps: Optional[GPSFix] = None
     gps_at: Optional[float] = None
+    gps_receiver: Optional[GpsReceiver] = None
+    gps_receiver_at: Optional[float] = Field(default=None, description="epoch [s] odbioru ostatniego statusu odbiornika GNSS")
     sensors_alive: SensorsAlive = Field(default_factory=SensorsAlive)
     battery_percent: Optional[float] = Field(
         default=None, ge=0, le=100,
@@ -199,6 +211,13 @@ class GpsEvent(Strict):
     data: GPSFix
 
 
+class GpsReceiverEvent(Strict):
+    type: Literal["gps_receiver"] = "gps_receiver"
+    robot_id: str
+    ts: float
+    data: GpsReceiver
+
+
 class SensorsAliveEvent(Strict):
     type: Literal["sensors_alive"] = "sensors_alive"
     robot_id: str
@@ -227,7 +246,7 @@ class SnapshotEvent(Strict):
 
 TelemetryEvent = Union[
     SnapshotEvent, ImuEvent, JointsEvent, OdometryEvent,
-    UltrasoundEvent, PtzEvent, GpsEvent, SensorsAliveEvent, StatusEvent,
+    UltrasoundEvent, PtzEvent, GpsEvent, GpsReceiverEvent, SensorsAliveEvent, StatusEvent,
 ]
 
 

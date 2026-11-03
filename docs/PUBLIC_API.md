@@ -65,10 +65,11 @@ Check `/health` before requesting data. `/health` shows the server state, `onlin
 |---|---|
 | `online` | The robot has an open gateway connection and sent something in the last 5 s. |
 | `last_seen` | Time of the last robot message, in epoch seconds as a float. |
-| `TelemetrySnapshot` | Sections: `imu`, `joints`, `odometry`, `ultrasound`, `ptz`, `gps`, `sensors_alive`. Each has a receive time `*_at`. Each stays `null` until its data arrives after gateway startup. `status` is computed when the response is built. |
+| `TelemetrySnapshot` | Sections: `imu`, `joints`, `odometry`, `ultrasound`, `ptz`, `gps`, `gps_receiver`, `sensors_alive`. Each has a receive time `*_at`. Each stays `null` until its data arrives after gateway startup. `status` is computed when the response is built. |
 | `ts`, `*_at`, `last_seen` | Server receive times (epoch). The robot clock is not used. |
 | Units | Angles: radians. Angular velocities: rad/s. Accelerations: m/s². Positions: metres. Velocities: m/s. `ultrasound`: metres. GPS: decimal degrees; altitude: metres; `accuracy_m`: metres. |
 | `gps.source` | `gnss`: position from the satellite receiver (`satellites`, `fix_quality` as in NMEA). `wifi`: estimate from nearby Wi-Fi networks, used indoors where the receiver has no fix; then `satellites` and `fix_quality` are `0`, `altitude` is `0.0` and `accuracy_m` is the error radius in metres (typically 20–100 m). `cell`: reserved for a cell-tower estimate. A `wifi` sample never replaces a GNSS fix younger than 60 s; a GNSS fix replaces a `wifi` estimate at once. Draw `accuracy_m` as a circle, not a point. |
+| `gps_receiver` | State of the GNSS receiver on the robot, sent every 5 s even without a fix: `fix`, `satellites` tracked, `nmea_alive` (sentences flowing from the module), `published` fixes since the publisher started. `gps_receiver_at` older than ~20 s means the publisher or its link is down; `fix: false` with a fresh `gps_receiver_at` means it is running and waiting for satellites. `gps` holds the last position regardless of the current `fix`. |
 | `battery_percent` | Currently always `null`. The robot does not publish battery state. |
 
 Shortened `GET /api/v1/robots/cerber-lite3-01/telemetry/latest` example:
@@ -113,7 +114,7 @@ The server sends only text JSON frames wrapped in a `TelemetryEventEnvelope`:
 | `type` | `data` | Notes |
 |---|---|---|
 | `snapshot` | `TelemetrySnapshot` | Always the first frame after connecting. |
-| `imu`, `joints`, `odometry`, `ultrasound`, `ptz`, `gps`, `sensors_alive` | matching model | At most **1 frame per second per type**. The last value in each window is delivered. |
+| `imu`, `joints`, `odometry`, `ultrasound`, `ptz`, `gps`, `gps_receiver`, `sensors_alive` | matching model | At most **1 frame per second per type**. The last value in each window is delivered. |
 | `status` | `RobotStatus` | Sent immediately when `online`, `rosbridge_connected` or `mqtt_connected` changes, and as a heartbeat **every 5 s**. |
 
 No client frames are required. The server ignores them. The client frame limit is 4096 B. Larger frames close the connection with `1009`. Treat the connection as dead if no frame arrives for more than ~15 s. Reconnect.
