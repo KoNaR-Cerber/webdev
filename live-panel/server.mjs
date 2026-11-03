@@ -4,18 +4,29 @@ import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
-const API_ORIGIN = 'https://cerber.machinekind.ai';
-const CAMERA_URL = `${API_ORIGIN}/video/normal_cam/whep`;
+export const DEFAULT_API_ORIGIN = 'https://cerber.machinekind.ai';
+export const DEFAULT_ROBOT_ID = 'cerber-lite3-01';
+const CAMERA_PATH = '/video/normal_cam/whep';
 const EVENT_TYPES = new Set(['snapshot', 'status', 'imu', 'joints', 'odometry', 'ultrasound', 'gps', 'ptz', 'sensors_alive']);
 const MAX_BODY = 65_536;
 const MAX_RESPONSE = 131_072;
 const MAX_BUFFER = 262_144;
 
-export function cameraSessionUrl(location) {
+export function parseOrigin(value, name = 'origin') {
+  let url;
+  try { url = new URL(value); } catch { throw new Error(`${name} must be an http(s) origin`); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+    throw new Error(`${name} must be an http(s) origin without path, credentials or query`);
+  }
+  return url.origin;
+}
+
+export function cameraSessionUrl(location, cameraUrl = `${DEFAULT_API_ORIGIN}${CAMERA_PATH}`) {
   if (!location) throw new Error('Missing camera session');
-  const url = new URL(location, CAMERA_URL);
-  if (url.origin !== API_ORIGIN || url.username || url.password || url.search || url.hash ||
-      !/^\/video\/normal_cam\/whep\/[a-zA-Z0-9_-]{8,128}$/.test(url.pathname)) {
+  const base = new URL(cameraUrl);
+  const url = new URL(location, cameraUrl);
+  const rest = url.pathname.startsWith(`${base.pathname}/`) ? url.pathname.slice(base.pathname.length + 1) : '';
+  if (url.origin !== base.origin || url.username || url.password || url.search || url.hash || !/^[a-zA-Z0-9_-]{8,128}$/.test(rest)) {
     throw new Error('Unexpected camera session');
   }
   return url.href;
@@ -36,6 +47,12 @@ async function boundedText(stream, limit) {
 
 export async function createPanelServer({
   apiKey,
+  apiOrigin = DEFAULT_API_ORIGIN,
+  videoOrigin = apiOrigin,
+  robotId = DEFAULT_ROBOT_ID,
+  hosts = [],
+  bind = hosts.length ? '0.0.0.0' : '127.0.0.1',
+  maxViewers = 8,
   htmlPath = new URL('./public/index.html', import.meta.url),
   html,
   fetchImpl = globalThis.fetch,
@@ -47,6 +64,15 @@ export async function createPanelServer({
   if (typeof apiKey !== 'string' || !apiKey.trim() || apiKey.length > 1024 || /[\r\n\0]/.test(apiKey)) {
     throw new Error('Set CERBER_API_KEY in .env before starting the panel.');
   }
+  apiOrigin = parseOrigin(apiOrigin, 'CERBER_API_ORIGIN');
+  videoOrigin = parseOrigin(videoOrigin, 'CERBER_VIDEO_ORIGIN');
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(robotId)) throw new Error('CERBER_ROBOT_ID must be a plain identifier');
+  if (!Array.isArray(hosts) || hosts.some(h => !/^[a-z0-9.-]+(:\d{1,5})?$/i.test(h))) {
+    throw new Error('CERBER_PANEL_HOSTS must be a comma-separated list of host[:port] names');
+  }
+  if (!Number.isInteger(maxViewers) || maxViewers < 1 || maxViewers > 64) throw new Error('CERBER_PANEL_MAX_VIEWERS must be 1-64');
+  const cameraUrl = `${videoOrigin}${CAMERA_PATH}`;
+  const streamUrl = `${apiOrigin.replace(/^http/, 'ws')}/api/v1/robots/${robotId}/telemetry/stream?api_key=${encodeURIComponent(apiKey)}`;
   const page = html ?? await readFile(htmlPath, 'utf8');
   if (page.includes(apiKey)) throw new Error('Panel HTML must not contain the API key.');
   const clients = new Set();
@@ -54,6 +80,8 @@ export async function createPanelServer({
   const cache = new Map();
   const counts = Object.create(null);
   const pending = new Set();
+  const allowedHosts = new Set(hosts);
+  const allowedOrigins = new Set(hosts.flatMap(h => [`https://${h}`, `http://${h}`]));
   let ws, retryTimer, orphanTimer, heartbeatTimer;
   let stopping = false, lastFrame = 0, openedAt = 0, retry = retryDelayMs, pendingCameras = 0;
   let upstreamState = 'connecting';
@@ -116,7 +144,7 @@ export async function createPanelServer({
     openedAt = Date.now();
     lastFrame = 0;
     try {
-      ws = new WebSocketImpl(`${API_ORIGIN.replace('https:', 'wss:')}/api/v1/robots/cerber-lite3-01/telemetry/stream?api_key=${encodeURIComponent(apiKey)}`);
+      ws = new WebSocketImpl(streamUrl);
     } catch {
       scheduleReconnect();
       return;
@@ -157,11 +185,22 @@ export async function createPanelServer({
     retry = Math.min(retry * 2, 15_000);
   }
 
+  function localRequest(req) {
+    // Loopback always works for the operator and container health checks; configured public hosts work behind a
+    // reverse proxy that passes the browser's Host header through (Caddy does). Anything else is refused.
+    const localHost = `127.0.0.1:${server.address()?.port}`;
+    const host = req.headers.host ?? '';
+    if (host !== localHost && !allowedHosts.has(host)) return false;
+    const origin = req.headers.origin;
+    if (origin && origin !== `http://${localHost}` && !allowedOrigins.has(origin)) return false;
+    // A link from another site is a cross-site top-level navigation and must open the page; every other
+    // cross-site request (a form, fetch or EventSource from a foreign page) is refused.
+    if (req.headers['sec-fetch-site'] === 'cross-site' && !(req.method === 'GET' && req.headers['sec-fetch-mode'] === 'navigate')) return false;
+    return true;
+  }
+
   async function handle(req, res) {
-    const host = `127.0.0.1:${server.address()?.port}`;
-    if (req.headers.host !== host || (req.headers.origin && req.headers.origin !== `http://${host}`) || req.headers['sec-fetch-site'] === 'cross-site') {
-      return reply(res, 403, 'Local requests only');
-    }
+    if (!localRequest(req)) return reply(res, 403, 'Local requests only');
     if (stopping) return reply(res, 503, 'Panel is stopping');
     if (req.method === 'GET' && req.url === '/') return reply(res, 200, page, 'text/html; charset=utf-8');
     if (req.method === 'GET' && req.url === '/health-local') {
@@ -172,7 +211,7 @@ export async function createPanelServer({
       }), 'application/json');
     }
     if (req.method === 'GET' && req.url === '/events') {
-      if (clients.size >= 8) return reply(res, 503, 'Too many viewers');
+      if (clients.size >= maxViewers) return reply(res, 503, 'Too many viewers');
       clearTimeout(orphanTimer);
       orphanTimer = undefined;
       res.writeHead(200, {
@@ -187,7 +226,7 @@ export async function createPanelServer({
     }
     if (req.method === 'POST' && req.url === '/whep') {
       if (req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/sdp') return reply(res, 415, 'Expected SDP');
-      if (sessions.size + pendingCameras >= 8) return reply(res, 503, 'Too many camera sessions');
+      if (sessions.size + pendingCameras >= maxViewers) return reply(res, 503, 'Too many camera sessions');
       if (Number(req.headers['content-length']) > MAX_BODY) return reply(res, 413, 'Offer too large', undefined, { Connection: 'close' });
       pendingCameras++;
       let remoteUrl, retained = false;
@@ -201,7 +240,7 @@ export async function createPanelServer({
           }
           body += chunk.toString('utf8');
         }
-        const remote = await fetchImpl(CAMERA_URL, {
+        const remote = await fetchImpl(cameraUrl, {
           method: 'POST', redirect: 'error',
           headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/sdp' },
           body, signal: AbortSignal.timeout(12_000),
@@ -210,7 +249,7 @@ export async function createPanelServer({
           await remote.body?.cancel();
           return reply(res, 502, 'Camera receiver unavailable');
         }
-        remoteUrl = cameraSessionUrl(remote.headers.get('Location'));
+        remoteUrl = cameraSessionUrl(remote.headers.get('Location'), cameraUrl);
         const answer = await boundedText(remote.body, MAX_RESPONSE);
         if (!answer.startsWith('v=0') || answer.includes(apiKey)) throw new Error('Invalid camera answer');
         if (stopping || res.destroyed) return;
@@ -238,7 +277,7 @@ export async function createPanelServer({
   });
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
-  server.maxConnections = 32;
+  server.maxConnections = 4 * maxViewers;
 
   return {
     server,
@@ -246,7 +285,7 @@ export async function createPanelServer({
       if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid panel port');
       await new Promise((resolveListen, reject) => {
         server.once('error', reject);
-        server.listen(port, '127.0.0.1', () => { server.off('error', reject); resolveListen(); });
+        server.listen(port, bind, () => { server.off('error', reject); resolveListen(); });
       });
       connectUpstream();
       heartbeatTimer = setInterval(() => {
@@ -276,14 +315,26 @@ export async function createPanelServer({
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const env = process.env;
+  const optional = (value) => (value?.trim() ? value.trim() : undefined);
   try {
-    const port = Number(process.env.CERBER_PANEL_PORT || 8765);
+    const port = Number(env.CERBER_PANEL_PORT || 8765);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid CERBER_PANEL_PORT');
-    const panel = await createPanelServer({ apiKey: process.env.CERBER_API_KEY });
+    const maxViewers = optional(env.CERBER_PANEL_MAX_VIEWERS);
+    const panel = await createPanelServer({
+      apiKey: env.CERBER_API_KEY,
+      apiOrigin: optional(env.CERBER_API_ORIGIN),
+      videoOrigin: optional(env.CERBER_VIDEO_ORIGIN),
+      robotId: optional(env.CERBER_ROBOT_ID),
+      hosts: (env.CERBER_PANEL_HOSTS || '').split(',').map(h => h.trim()).filter(Boolean),
+      bind: optional(env.CERBER_PANEL_BIND),
+      maxViewers: maxViewers === undefined ? undefined : Number(maxViewers),
+    });
     console.log(`Cerber live panel: ${await panel.listen(port)}`);
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { void panel.close(); });
-  } catch {
-    console.error('Cannot start panel. Check CERBER_API_KEY, CERBER_PANEL_PORT and that the port is available.');
+  } catch (error) {
+    // Configuration errors name the variable; they never contain the key itself.
+    console.error(`Cannot start panel: ${error?.message ?? error}`);
     process.exitCode = 1;
   }
 }

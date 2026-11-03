@@ -1,10 +1,16 @@
 # Projekt-Cerber -- sekcja webdev
 do zmiany readme
 
-## Lokalny panel na żywo
+## Panel na żywo
 
 [live-panel](live-panel/README.md) pokazuje wbudowaną kamerę Cerbera, orientację
-korpusu, wykresy IMU, pozycje 12 stawów i odometrię z publicznego API.
+korpusu, wykresy IMU, pozycje 12 stawów i odometrię z publicznego API. Tylko odczyt.
+
+Na serwerze działa jako serwis `live-panel` z `docker-compose.yml` pod
+`https://cerber.machinekind.ai/` (hasło w przeglądarce, nadaje je Caddy).
+Dashboard teleoperacji jest pod `https://cerber.machinekind.ai/teleop/` (tylko VPN).
+
+Lokalnie, z własnym kluczem API:
 
 ```sh
 cd live-panel

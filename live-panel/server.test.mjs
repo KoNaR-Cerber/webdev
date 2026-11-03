@@ -5,7 +5,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { cameraSessionUrl, createPanelServer } from './server.mjs';
 
 const KEY = 'test-only-secret-that-must-stay-on-server';
-const SESSION = 'https://cerber.machinekind.ai/video/normal_cam/whep/12345678-abcd-1234-abcd-123456789012';
+// MediaMTX answers with a Location relative to the server root; the panel resolves it against the camera URL.
+const SESSION_PATH = '/video/normal_cam/whep/12345678-abcd-1234-abcd-123456789012';
+const SESSION = `https://cerber.machinekind.ai${SESSION_PATH}`;
 const SDP = 'v=0\r\ns=test\r\n';
 
 async function fixture(t, options = {}) {
@@ -23,7 +25,7 @@ async function fixture(t, options = {}) {
     fetchImpl: async (url, init) => {
       requests.push({ url, ...init });
       return init.method === 'POST'
-        ? new Response(SDP, { status: 201, headers: { Location: SESSION } })
+        ? new Response(SDP, { status: 201, headers: { Location: SESSION_PATH } })
         : new Response(null, { status: 204 });
     },
     ...options,
@@ -155,6 +157,10 @@ test('camera proxy authenticates only the fixed destination and hides remote ses
 
 test('camera session validation rejects foreign origins, cameras, credentials and query strings', () => {
   assert.equal(cameraSessionUrl('/video/normal_cam/whep/12345678-abcd'), 'https://cerber.machinekind.ai/video/normal_cam/whep/12345678-abcd');
+  const internal = 'http://mediamtx:8889/video/normal_cam/whep';
+  assert.equal(cameraSessionUrl('/video/normal_cam/whep/12345678-abcd', internal), 'http://mediamtx:8889/video/normal_cam/whep/12345678-abcd');
+  assert.throws(() => cameraSessionUrl(SESSION, internal));
+  assert.throws(() => cameraSessionUrl('/video/normal_cam/whep/../12345678-abcd', internal));
   for (const location of [null, 'https://attacker.example/video/normal_cam/whep/12345678',
     'https://user:pass@cerber.machinekind.ai/video/normal_cam/whep/12345678',
     '/video/other_cam/whep/12345678', '/video/normal_cam/whep/12345678?key=secret',
@@ -205,4 +211,46 @@ test('keeps video while SSE is connected, then removes orphan sessions and clean
   await postOffer(base);
   await panel.close();
   assert.equal(requests.filter(call => call.method === 'DELETE').length, 2);
+});
+
+test('configured public hosts work behind a proxy; cross-site is allowed only for navigation', async t => {
+  const { base, panel } = await fixture(t, { hosts: ['panel.example', 'panel.example:8443'], bind: '127.0.0.1' });
+  assert.equal(panel.server.address().address, '127.0.0.1');
+  const get = headers => request(base, '/', { headers });
+  assert.equal((await get({})).status, 200, 'loopback host still works');
+  assert.equal((await get({ Host: 'panel.example' })).status, 200);
+  assert.equal((await get({ Host: 'panel.example:8443' })).status, 200);
+  assert.equal((await get({ Host: 'panel.example', Origin: 'https://panel.example' })).status, 200);
+  assert.equal((await get({ Host: 'panel.example', Origin: 'https://attacker.example' })).status, 403);
+  assert.equal((await get({ Host: 'other.example' })).status, 403);
+  assert.equal((await get({ Host: 'localhost:' + panel.server.address().port })).status, 403);
+  assert.equal((await get({ Host: 'panel.example', 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'navigate' })).status, 200, 'a link from another site opens the page');
+  assert.equal((await get({ Host: 'panel.example', 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'cors' })).status, 403);
+  assert.equal((await request(base, '/events', { headers: { Host: 'panel.example', 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'cors' } })).status, 403);
+  const sdp = { 'Content-Type': 'application/sdp' };
+  assert.equal((await request(base, '/whep', { method: 'POST', headers: { Host: 'panel.example', 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'navigate', ...sdp }, body: SDP })).status, 403);
+  assert.equal((await request(base, '/whep', { method: 'POST', headers: { Host: 'panel.example', Origin: 'https://panel.example', 'Sec-Fetch-Site': 'same-origin', ...sdp }, body: SDP })).status, 201);
+});
+
+test('uses the configured API and video origins for the configured robot', async t => {
+  const { base, sockets, requests } = await fixture(t, { apiOrigin: 'http://gateway:8000', videoOrigin: 'http://mediamtx:8889', robotId: 'robot-2' });
+  assert.equal(sockets[0].url, `ws://gateway:8000/api/v1/robots/robot-2/telemetry/stream?api_key=${encodeURIComponent(KEY)}`);
+  const result = await postOffer(base);
+  assert.equal(result.status, 201);
+  assert.equal(requests[0].url, 'http://mediamtx:8889/video/normal_cam/whep');
+  await request(base, result.headers.location, { method: 'DELETE' });
+  assert.equal(requests[1].url, `http://mediamtx:8889${SESSION_PATH}`);
+  for (const bad of [{ apiOrigin: 'ftp://x' }, { apiOrigin: 'https://x/path' }, { videoOrigin: 'https://u:p@x' },
+    { robotId: 'a/b' }, { hosts: ['bad host'] }, { hosts: 'panel.example' }, { maxViewers: 0 }, { maxViewers: 1.5 }]) {
+    await assert.rejects(createPanelServer({ apiKey: KEY, html: 'x', WebSocketImpl: class {}, ...bad }), bad.toString());
+  }
+});
+
+test('a session location on a foreign origin is refused even when it looks like the public host', async t => {
+  const { base, requests } = await fixture(t, { videoOrigin: 'http://mediamtx:8889', fetchImpl: async (url, init) => {
+    requests.push({ url, ...init });
+    return init.method === 'DELETE' ? new Response(null, { status: 204 }) : new Response(SDP, { status: 201, headers: { Location: SESSION } });
+  } });
+  assert.equal((await postOffer(base)).status, 502);
+  assert.ok(requests.every(call => new URL(call.url).origin === 'http://mediamtx:8889'));
 });
