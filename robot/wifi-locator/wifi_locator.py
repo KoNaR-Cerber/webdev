@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Wi-Fi fallback position for the Cerber public API.
 
-Scans nearby Wi-Fi networks with nmcli, asks the Google Geolocation API for a
+Scans nearby Wi-Fi networks with nmcli (or `iw` when the radio runs a hotspot,
+where NetworkManager cannot scan), asks the Google Geolocation API for a
 position estimate and publishes it on the robot GPS MQTT topic in the public
 GPS format with `source: "wifi"` and `accuracy_m`. The gateway ignores these
 samples while it has a fresh GNSS fix, so the real receiver always wins.
@@ -67,9 +68,15 @@ class Config:
         if interface and (any(c.isspace() for c in interface) or interface.startswith("-")):
             raise ValueError("CERBER_WIFI_INTERFACE is not an interface name")
         self.interface = interface or None
+        self.scanner = env_str(environ, "CERBER_WIFI_SCANNER", "nmcli")
+        if self.scanner not in ("nmcli", "iw"):
+            raise ValueError("CERBER_WIFI_SCANNER must be nmcli or iw")
+        if self.scanner == "iw" and not self.interface:
+            raise ValueError("CERBER_WIFI_INTERFACE is required with the iw scanner")
         self.nmcli = env_str(environ, "CERBER_WIFI_NMCLI", "/usr/bin/nmcli")
-        if not os.path.isabs(self.nmcli):
-            raise ValueError("CERBER_WIFI_NMCLI must be an absolute path")
+        self.iw = env_str(environ, "CERBER_WIFI_IW", "/usr/sbin/iw")
+        if not os.path.isabs(self.nmcli) or not os.path.isabs(self.iw):
+            raise ValueError("CERBER_WIFI_NMCLI and CERBER_WIFI_IW must be absolute paths")
         self.scan_interval = env_number(environ, "CERBER_WIFI_SCAN_INTERVAL_S", 30.0, 5.0, 3600.0)
         self.min_query_interval = env_number(environ, "CERBER_WIFI_MIN_QUERY_INTERVAL_S", 120.0, 10.0, 86400.0)
         self.max_query_interval = env_number(environ, "CERBER_WIFI_MAX_QUERY_INTERVAL_S", 600.0, 10.0, 86400.0)
@@ -124,7 +131,65 @@ def parse_nmcli(text, max_aps):
     return aps[:max_aps]
 
 
+def channel_of(freq_mhz):
+    """802.11 channel number for a 2.4/5 GHz centre frequency; None when unknown."""
+    if 2412 <= freq_mhz <= 2472:
+        return (freq_mhz - 2407) // 5
+    if freq_mhz == 2484:
+        return 14
+    if 5000 < freq_mhz < 5900:
+        return (freq_mhz - 5000) // 5
+    return None
+
+
+def parse_iw(text, max_aps, own_mac=None):
+    """Output of `iw dev <if> scan` -> strongest access points first. Works while the radio is an
+    access point (hotspot), where nmcli lists only the hotspot itself. Needs CAP_NET_ADMIN."""
+    seen, mac, freq, dbm = {}, None, None, None
+
+    def flush():
+        if mac and dbm is not None and mac != own_mac:
+            ap = {"macAddress": mac, "signalStrength": dbm}
+            if freq and channel_of(freq):
+                ap["channel"] = channel_of(freq)
+            if mac not in seen or seen[mac]["signalStrength"] < dbm:
+                seen[mac] = ap
+
+    for line in text.splitlines():
+        s = line.strip()
+        if line.startswith("BSS ") and len(s) >= 21:
+            flush()
+            candidate = s[4:21].upper()
+            mac = candidate if candidate.count(":") == 5 and len(candidate) == 17 else None
+            freq = dbm = None
+        elif s.startswith("freq:"):
+            try:
+                freq = int(float(s[5:].split()[0]))
+            except (ValueError, IndexError):
+                freq = None
+        elif s.startswith("signal:"):
+            try:
+                dbm = round(float(s[7:].split()[0]))
+            except (ValueError, IndexError):
+                dbm = None
+    flush()
+    aps = sorted(seen.values(), key=lambda a: (-a["signalStrength"], a["macAddress"]))
+    return aps[:max_aps]
+
+
+def own_mac(interface):
+    try:
+        with open(f"/sys/class/net/{interface}/address", encoding="ascii") as f:
+            return f.read().strip().upper()
+    except OSError:
+        return None
+
+
 def scan(cfg):
+    if cfg.scanner == "iw":
+        result = subprocess.run([cfg.iw, "dev", cfg.interface, "scan"], capture_output=True, text=True,
+                                timeout=30, check=True)
+        return parse_iw(result.stdout, cfg.max_aps, own_mac(cfg.interface))
     cmd = [cfg.nmcli, "-t", "-f", "BSSID,SIGNAL,CHAN", "dev", "wifi", "list", "--rescan", "auto"]
     if cfg.interface:
         cmd += ["ifname", cfg.interface]
@@ -318,7 +383,7 @@ def main(argv=None):
         log("configuration_invalid", error=str(ex))
         return 2
     if args.check_config:
-        log("configuration_valid", interface=cfg.interface, scan_interval_s=cfg.scan_interval)
+        log("configuration_valid", scanner=cfg.scanner, interface=cfg.interface, scan_interval_s=cfg.scan_interval)
         return 0
 
     stopping = False
@@ -331,7 +396,7 @@ def main(argv=None):
         signal.signal(signum, stop)
 
     locator = Locator(cfg)
-    log("started", interface=cfg.interface, scan_interval_s=cfg.scan_interval, dry_run=args.dry_run)
+    log("started", scanner=cfg.scanner, interface=cfg.interface, scan_interval_s=cfg.scan_interval, dry_run=args.dry_run)
     while not stopping:
         try:
             published = locator.step(dry_run=args.dry_run)

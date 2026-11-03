@@ -59,11 +59,13 @@ used, or the reason nothing would be published. Then
 systemd runs it before every start. Ten consecutive scan, query or publish
 failures exit nonzero so systemd restarts the service.
 
-Scanning uses `nmcli dev wifi list --rescan auto`, so it works with the scan
-cache NetworkManager keeps for the connected Wi-Fi link and does not need root.
-If the Jetson's Wi-Fi is in hotspot (AP) mode on the only radio, NetworkManager
-cannot scan and the service logs `too_few_aps`; set `CERBER_WIFI_INTERFACE` to a
-client-mode interface in that case.
+Scanning: `CERBER_WIFI_SCANNER=nmcli` uses `nmcli dev wifi list --rescan auto`
+(client-mode Wi-Fi, no root). On the Lite3 Jetson the only radio runs the
+`santoria-hotspot` access point, where NetworkManager lists just the hotspot
+itself; there use `CERBER_WIFI_SCANNER=iw` with `CERBER_WIFI_INTERFACE`, which
+runs `iw dev <if> scan` (works in AP mode on this driver, 18 networks seen on
+2026-11-03). The unit grants `CAP_NET_ADMIN` for that; the hotspot's own BSS is
+skipped.
 
 ## Tests
 

@@ -15,6 +15,9 @@ Restart=always
 RestartSec=10
 KillSignal=SIGTERM
 TimeoutStopSec=10
+# iw scan needs CAP_NET_ADMIN (nmcli does not); the service still runs as cerber
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

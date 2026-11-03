@@ -43,14 +43,45 @@ def test_parse_nmcli():
     assert wl.parse_nmcli("", 15) == []
 
 
+IW = """BSS aa:bb:cc:dd:ee:01(on wlan0)
+	TSF: 1 usec (0d, 00:00:00)
+	freq: 5180.0
+	signal: -62.00 dBm
+	SSID: one
+BSS aa:bb:cc:dd:ee:02(on wlan0) -- associated
+	freq: 2437
+	signal: -40.50 dBm
+BSS aa:bb:cc:dd:ee:03(on wlan0)
+	freq: 2462
+BSS aa:bb:cc:dd:ee:04(on wlan0)
+	freq: 5955.0
+	signal: -70 dBm
+BSS aa:bb:cc:dd:ee:02(on wlan0)
+	freq: 2437
+	signal: -55.00 dBm
+"""
+
+
+def test_parse_iw():
+    aps = wl.parse_iw(IW, max_aps=15)
+    assert aps == [{"macAddress": "AA:BB:CC:DD:EE:02", "signalStrength": -40, "channel": 6},
+                   {"macAddress": "AA:BB:CC:DD:EE:01", "signalStrength": -62, "channel": 36},
+                   {"macAddress": "AA:BB:CC:DD:EE:04", "signalStrength": -70}]  # 6 GHz: no channel; :03 no signal
+    assert wl.parse_iw(IW, 15, own_mac="AA:BB:CC:DD:EE:02")[0]["macAddress"] == "AA:BB:CC:DD:EE:01"
+    assert wl.parse_iw("", 15) == []
+    assert (wl.channel_of(2412), wl.channel_of(2484), wl.channel_of(5500), wl.channel_of(900)) == (1, 14, 100, None)
+
+
 def test_config():
     c = cfg()
     assert (c.mqtt_port, c.mqtt_topic, c.interface, c.scan_interval) == (1883, "cerber/gps/data", None, 30.0)
     assert cfg(CERBER_WIFI_INTERFACE="wlan0", CERBER_WIFI_MQTT_SOURCE_IP="10.0.0.2").mqtt_source_ip == "10.0.0.2"
+    assert cfg(CERBER_WIFI_SCANNER="iw", CERBER_WIFI_INTERFACE="wlan0").scanner == "iw"
     for bad in ({"CERBER_WIFI_GOOGLE_API_KEY": ""}, {"CERBER_WIFI_GOOGLE_API_KEY": "short"},
                 {"CERBER_WIFI_MQTT_HOST": "broker.example"}, {"CERBER_WIFI_MQTT_TOPIC": "a/#"},
                 {"CERBER_WIFI_MAX_QUERY_INTERVAL_S": "60"}, {"CERBER_WIFI_SCAN_INTERVAL_S": "1"},
-                {"CERBER_WIFI_INTERFACE": "--bad"}, {"CERBER_WIFI_NMCLI": "nmcli"}):
+                {"CERBER_WIFI_INTERFACE": "--bad"}, {"CERBER_WIFI_NMCLI": "nmcli"},
+                {"CERBER_WIFI_SCANNER": "iw"}, {"CERBER_WIFI_SCANNER": "iwlist", "CERBER_WIFI_INTERFACE": "wlan0"}):
         with pytest.raises(ValueError):
             wl.Config({**ENV, **bad})
 
