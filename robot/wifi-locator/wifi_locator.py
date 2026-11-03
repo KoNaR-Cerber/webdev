@@ -193,7 +193,8 @@ def scan(cfg):
             result = subprocess.run([cfg.iw, "dev", cfg.interface, "scan"], capture_output=True, text=True,
                                     timeout=45, check=True)
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as ex:
-            log("scan_trigger_failed", error=f"{type(ex).__name__}"[:60], fallback="scan dump")
+            detail = (ex.stderr or "") if isinstance(ex.stderr, str) else (ex.stderr or b"").decode(errors="replace")
+            log("scan_trigger_failed", error=f"{type(ex).__name__}: {detail.strip()}"[:120], fallback="scan dump")
             result = subprocess.run([cfg.iw, "dev", cfg.interface, "scan", "dump"], capture_output=True,
                                     text=True, timeout=15, check=True)
         return parse_iw(result.stdout, cfg.max_aps, own_mac(cfg.interface))
