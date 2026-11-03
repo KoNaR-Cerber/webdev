@@ -1,5 +1,6 @@
 #!/bin/bash
-# Wdrozenie na serwer staging: pobiera galaz `staging` z forka do katalogu stacku (git jako wlasciciel katalogu),
+# Wdrozenie na serwer staging: pobiera galaz `staging` z forka do katalogu stacku (git jako wlasciciel katalogu,
+# tylko fast-forward - lokalne zmiany w checkoucie przerywaja deploy),
 # uzupelnia w .env wartosci, ktore compose wymaga, i przebudowuje wskazane serwisy (domyslnie wszystkie zmienione).
 #
 #   sudo bash scripts/server/deploy-staging.sh                 # wszystkie serwisy (compose sam pomija niezmienione)
@@ -18,7 +19,8 @@ ENV_FILE=$STACK/.env
 asowner() { runuser -u "$STACK_USER" -- "$@"; }
 
 asowner git -C "$STACK" fetch -q "$GIT_REMOTE" "$GIT_BRANCH"
-asowner git -C "$STACK" reset -q --hard "$GIT_REMOTE/$GIT_BRANCH"
+# tylko fast-forward: reczne zmiany w checkoucie zatrzymuja deploy zamiast zniknac
+asowner git -C "$STACK" merge -q --ff-only "$GIT_REMOTE/$GIT_BRANCH"
 echo "stack na: $(asowner git -C "$STACK" log --oneline -1)"
 
 # wartosci wymagane przez docker-compose.yml, ktore mozna wygenerowac (nie sa nikomu podawane)
