@@ -7,7 +7,10 @@ CERBER_WIFI_MQTT_PORT=1883
 CERBER_WIFI_MQTT_TOPIC=cerber/gps/data
 # Optional: VPN source address to bind outgoing MQTT connections to.
 #CERBER_WIFI_MQTT_SOURCE_IP=
-# Optional: Wi-Fi interface to scan on (default: every Wi-Fi device NetworkManager knows).
+# Scanner: nmcli (client-mode Wi-Fi) or iw (works while the radio runs a hotspot; needs CAP_NET_ADMIN,
+# granted by the unit). iw requires CERBER_WIFI_INTERFACE.
+CERBER_WIFI_SCANNER=nmcli
+# Wi-Fi interface to scan on (optional for nmcli: every Wi-Fi device NetworkManager knows).
 #CERBER_WIFI_INTERFACE=wlan0
 # Scan cadence and Geolocation API quota guard (seconds). With the defaults a parked robot
 # costs ~144 queries/day, a moving one at most 720/day. Google's free tier is 10 000/month.
