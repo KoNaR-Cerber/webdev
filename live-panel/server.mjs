@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { createRecorder } from './recorder.mjs';
 
 export const DEFAULT_API_ORIGIN = 'https://cerber.machinekind.ai';
 export const DEFAULT_ROBOT_ID = 'cerber-lite3-01';
@@ -53,6 +54,7 @@ export async function createPanelServer({
   hosts = [],
   bind = hosts.length ? '0.0.0.0' : '127.0.0.1',
   maxViewers = 8,
+  recorder = null,
   htmlPath = new URL('./public/index.html', import.meta.url),
   html,
   fetchImpl = globalThis.fetch,
@@ -85,6 +87,7 @@ export async function createPanelServer({
   let ws, retryTimer, orphanTimer, heartbeatTimer;
   let stopping = false, lastFrame = 0, openedAt = 0, retry = retryDelayMs, pendingCameras = 0;
   let upstreamState = 'connecting';
+  let recordingBroadcast = null;
 
   const connected = () => ws?.readyState === 1;
   const reply = (res, status, body = '', type = 'text/plain; charset=utf-8', headers = {}) => {
@@ -166,6 +169,7 @@ export async function createPanelServer({
         counts[type] = (counts[type] || 0) + 1;
         if (type === 'snapshot') cache.clear();
         cache.set(type, message);
+        recorder?.record(message);
         broadcast(message);
       } catch { /* Ignore malformed upstream frames without logging their contents. */ }
     };
@@ -177,6 +181,15 @@ export async function createPanelServer({
       if (!stopping && upstreamState !== 'authorization_failed') scheduleReconnect();
     };
   }
+  function broadcastRecording() {
+    // Stan nagrywania do wszystkich kart; jedno odswiezenie na zmiane, nawet gdy zmian jest kilka naraz.
+    if (!recorder || recordingBroadcast) return;
+    recordingBroadcast = tracked((async () => {
+      try { broadcast(await recorder.status(), 'recording'); } catch { /* lista nagran chwilowo nieczytelna */ }
+      recordingBroadcast = null;
+    })());
+  }
+  if (recorder) recorder.onChange = broadcastRecording;
   function scheduleReconnect() {
     upstreamState = 'disconnected';
     clearTimeout(retryTimer);
@@ -207,9 +220,10 @@ export async function createPanelServer({
       return reply(res, 200, JSON.stringify({
         connected: connected(), state: upstreamState,
         lastFrameAgeMs: lastFrame ? Date.now() - lastFrame : null,
-        events: counts, viewers: clients.size,
+        events: counts, viewers: clients.size, recording: recorder?.active ?? null,
       }), 'application/json');
     }
+    if (req.url === '/recordings' || req.url?.startsWith('/recordings/')) return handleRecordings(req, res);
     if (req.method === 'GET' && req.url === '/events') {
       if (clients.size >= maxViewers) return reply(res, 503, 'Too many viewers');
       clearTimeout(orphanTimer);
@@ -221,6 +235,7 @@ export async function createPanelServer({
       clients.add(res);
       writeEvent(res, `event: connection\ndata: ${JSON.stringify({ connected: connected(), state: upstreamState })}\n\n`);
       for (const message of cache.values()) writeEvent(res, `data: ${JSON.stringify(message)}\n\n`);
+      if (recorder) broadcastRecording();
       res.on('close', () => { clients.delete(res); scheduleOrphanCleanup(); });
       return;
     }
@@ -272,6 +287,28 @@ export async function createPanelServer({
     }
     reply(res, 404, 'Not found');
   }
+  const json = (res, status, data) => reply(res, status, JSON.stringify(data), 'application/json');
+  async function handleRecordings(req, res) {
+    if (!recorder) return reply(res, 404, 'Recording is not configured');
+    const { method, url } = req;
+    try {
+      if (method === 'GET' && url === '/recordings') return json(res, 200, await recorder.status());
+      if (method === 'POST' && url === '/recordings') {
+        if (!connected()) return reply(res, 503, 'Telemetry upstream is not connected');
+        return json(res, 201, await recorder.start([...cache.values()]));
+      }
+      if (method === 'POST' && url === '/recordings/stop') return json(res, 200, await recorder.stop('user'));
+      if (method === 'DELETE' && url === '/recordings/demo') { await recorder.setDemo(null); return reply(res, 204); }
+      const demo = /^\/recordings\/([A-Za-z0-9-]{20})\/demo$/.exec(url ?? '');
+      if (method === 'POST' && demo) { await recorder.setDemo(demo[1]); return reply(res, 204); }
+      const one = /^\/recordings\/([A-Za-z0-9-]{20})$/.exec(url ?? '');
+      if (method === 'DELETE' && one) { await recorder.remove(one[1]); return reply(res, 204); }
+      return reply(res, 404, 'Not found');
+    } catch (error) {
+      const status = Number.isInteger(error?.code) ? error.code : 500;
+      return reply(res, status, status === 500 ? 'Recorder error' : error.message);
+    }
+  }
   const server = http.createServer((req, res) => {
     tracked(handle(req, res)).catch(() => reply(res, 500, 'Local panel error'));
   });
@@ -287,6 +324,7 @@ export async function createPanelServer({
         server.once('error', reject);
         server.listen(port, bind, () => { server.off('error', reject); resolveListen(); });
       });
+      if (recorder) await recorder.recover();
       connectUpstream();
       heartbeatTimer = setInterval(() => {
         for (const client of clients) writeEvent(client, ': heartbeat\n\n');
@@ -308,6 +346,7 @@ export async function createPanelServer({
       const closed = new Promise(resolveClose => server.close(resolveClose));
       server.closeAllConnections();
       for (const id of sessions.keys()) void releaseSession(id);
+      if (recorder) await recorder.close().catch(() => {});
       await Promise.allSettled([...pending]);
       await closed;
     },
@@ -321,7 +360,26 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const port = Number(env.CERBER_PANEL_PORT || 8765);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid CERBER_PANEL_PORT');
     const maxViewers = optional(env.CERBER_PANEL_MAX_VIEWERS);
+    const integer = (name) => {
+      const value = optional(env[name]);
+      if (value === undefined) return undefined;
+      if (!/^\d+$/.test(value)) throw new Error(`${name} must be an integer`);
+      return Number(value);
+    };
+    // Nagrywanie tylko z CERBER_RECORDINGS_DIR (na serwerze, wspolny wolumen z MediaMTX i gatewayem).
+    const recorder = optional(env.CERBER_RECORDINGS_DIR) ? createRecorder({
+      dir: env.CERBER_RECORDINGS_DIR.trim(),
+      mediamtxApi: optional(env.CERBER_MEDIAMTX_API) ?? 'http://mediamtx:9997',
+      mediamtxUser: optional(env.CERBER_MEDIAMTX_USER) ?? '',
+      mediamtxPass: optional(env.CERBER_MEDIAMTX_PASS) ?? '',
+      maxSeconds: integer('CERBER_RECORD_MAX_SECONDS'),
+      maxBytes: integer('CERBER_RECORD_MAX_BYTES'),
+      keep: integer('CERBER_RECORD_KEEP'),
+      totalBytes: integer('CERBER_RECORD_TOTAL_BYTES'),
+      log: (line) => console.log(`[recorder] ${line}`),
+    }) : null;
     const panel = await createPanelServer({
+      recorder,
       apiKey: env.CERBER_API_KEY,
       apiOrigin: optional(env.CERBER_API_ORIGIN),
       videoOrigin: optional(env.CERBER_VIDEO_ORIGIN),

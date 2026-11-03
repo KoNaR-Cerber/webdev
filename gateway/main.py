@@ -13,6 +13,9 @@ Stoi w sieci VPN: czyta rosbridge (ws://JETSON:9090) i MQTT
   WS   /api/v1/robots/{robot_id}/telemetry/stream?api_key=...
   GET  /openapi.json, /docs
 
+Robot demo (DEMO_ROBOT_ID, np. cerber-demo): te same trasy, dane z nagrania telemetrii odtwarzanego
+w petli (plik wskazany w DEMO_TELEMETRY_POINTER, wybierany z panelu live-panel); kamery pod */demo.
+
 WS: kazdy typ zdarzenia najwyzej raz na WS_THROTTLE_S (ostatnia wartosc zawsze dochodzi),
 snapshot aktualny zawsze. Zdarzenie `status` (online, rosbridge/mqtt) od razu przy zmianie i co
 WS_HEARTBEAT_S. online = rosbridge polaczony i wiadomosc ROS w ciagu STALE_AFTER_S.
@@ -72,6 +75,15 @@ STREAMS_VPN_ONLY = os.getenv("STREAMS_VPN_ONLY", "1") == "1"
 ROSBRIDGE_ENABLED = os.getenv("ROSBRIDGE_ENABLED", "1") == "1"
 MQTT_ENABLED = os.getenv("MQTT_ENABLED", "1") == "1"
 MAX_WS_CLIENTS = int(os.getenv("MAX_WS_CLIENTS", "20"))  # na robota; nadmiarowe -> close 1013
+# Robot demo: odtwarza w petli nagranie telemetrii (NDJSON z kopertami WS, zapisuje je live-panel), z czasami
+# przesunietymi na "teraz". Plik-wskaznik (sciezka nagrania w pierwszej linii) zmienia sie bez restartu gatewaya.
+# Pusty DEMO_ROBOT_ID = brak robota demo.
+DEMO_ROBOT_ID = os.getenv("DEMO_ROBOT_ID", "")
+DEMO_ROBOT_MODEL = os.getenv("DEMO_ROBOT_MODEL", f"{ROBOT_MODEL} (nagranie demo)")
+DEMO_TELEMETRY_POINTER = os.getenv("DEMO_TELEMETRY_POINTER", "/recordings/demo/telemetry.path")
+DEMO_POLL_S = float(os.getenv("DEMO_POLL_S", "2"))  # co tyle sprawdzany wskaznik (takze w trakcie odtwarzania)
+DEMO_LOOP_GAP_S = 1.0  # przerwa miedzy kolejnymi przebiegami nagrania
+DEMO_MAX_EVENTS = 100_000  # sufit zdarzen z jednego pliku (5 min publicznego strumienia to ~2 tys.)
 WS_QUEUE_MAX = 100  # ramek w kolejce klienta WS; przepelnienie = wolny klient -> rozlaczenie
 WS_MAX_SIZE = 4096  # max ramka od klienta [B] (po dekompresji); to samo w Dockerfile i README
 WS_CLOSE_WAIT_S = 1.0  # tyle czekamy na wyslanie 1008 do wolnego klienta, potem abort TCP
@@ -288,7 +300,30 @@ class RobotState:
             c.offer(text)  # wolny klient zostaje w clients (zajmuje slot) az gniazdo naprawde zniknie
 
 
+class DemoRobotState(RobotState):
+    """Robot zasilany z nagrania: online, gdy odtwarzanie trwa i ostatnie zdarzenie jest swieze;
+    rosbridge/mqtt w statusie znacza tu "odtwarzanie aktywne" (zrodlem jest plik, nie siec)."""
+
+    def __init__(self, robot_id: str):
+        super().__init__(robot_id)
+        self.replaying = False
+
+    def online(self) -> bool:
+        return (self.replaying and self.last_seen is not None
+                and time.time() - self.last_seen < STALE_AFTER_S)
+
+    def status(self) -> RobotStatus:
+        return RobotStatus(online=self.online(), last_seen=self.last_seen,
+                           rosbridge_connected=self.replaying, mqtt_connected=self.replaying)
+
+    def summary(self) -> RobotSummary:
+        return RobotSummary(robot_id=self.snapshot.robot_id, model=DEMO_ROBOT_MODEL,
+                            online=self.online(), last_seen=self.last_seen)
+
+
 robots: Dict[str, RobotState] = {ROBOT_ID: RobotState(ROBOT_ID)}
+if DEMO_ROBOT_ID:
+    robots[DEMO_ROBOT_ID] = DemoRobotState(DEMO_ROBOT_ID)
 ros_client = None  # roslibpy.Ros
 ros_ready = False  # WS do rosbridge otwarty (event 'ready' .. 'close'); is_connected roslibpy to samo TCP
 mqtt_connected = False
@@ -475,6 +510,105 @@ async def mqtt_task(robot: RobotState) -> None:
             await asyncio.sleep(3)
 
 
+# --- robot demo: odtwarzanie nagrania ---------------------------------------
+
+
+def read_pointer(path: str) -> Optional[str]:
+    """Pierwsza linia pliku-wskaznika = sciezka nagrania; brak pliku lub pusta linia = brak demo."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            line = f.readline().strip()
+    except OSError:
+        return None
+    return line or None
+
+
+def load_recording(path: str) -> list:
+    """NDJSON kopert WS (jak zapisuje live-panel) -> [(sekundy od pierwszego zdarzenia, zdarzenie)].
+    snapshot i status sa pomijane (stan i status powstaja na nowo przy odtwarzaniu), zle linie tez."""
+    events = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                ev = TelemetryEventEnvelope.model_validate_json(line).event
+            except Exception:
+                continue
+            if ev.type in ("snapshot", "status"):
+                continue
+            events.append(ev)
+            if len(events) >= DEMO_MAX_EVENTS:
+                break
+    if not events:
+        return []
+    t0 = events[0].ts
+    return [(max(0.0, ev.ts - t0), ev) for ev in events]
+
+
+def _source_key(src: Optional[str]):
+    if src is None:
+        return None
+    try:
+        st = os.stat(src)
+    except OSError:
+        return None
+    return (src, st.st_mtime_ns, st.st_size)
+
+
+async def demo_task(robot: DemoRobotState) -> None:
+    """Petla: wskaznik -> plik -> zdarzenia w oryginalnym tempie, ts = teraz, robot_id = demo; po koncu od nowa.
+    Zmiana wskaznika lub pliku (takze w trakcie przebiegu) przeladowuje nagranie; brak = robot offline."""
+    loaded_key, events = None, []
+    while True:
+        key = _source_key(read_pointer(DEMO_TELEMETRY_POINTER))
+        if key is None:
+            if robot.replaying:
+                robot.replaying = False
+                robot.check_status()
+                log("[demo] no recording selected, robot offline")
+            loaded_key, events = None, []
+            await asyncio.sleep(DEMO_POLL_S)
+            continue
+        if key != loaded_key:
+            try:
+                events = await asyncio.to_thread(load_recording, key[0])
+            except Exception as ex:
+                log(f"[demo] cannot read {key[0]}: {why(ex)}")
+                events = []
+            loaded_key = key
+            log(f"[demo] replaying {key[0]}: {len(events)} events")
+            if not events and robot.replaying:
+                robot.replaying = False
+                robot.check_status()
+        if not events:
+            await asyncio.sleep(DEMO_POLL_S)
+            continue
+        robot.replaying = True
+        robot.check_status()
+        base = time.monotonic()
+        next_check = base + DEMO_POLL_S
+        changed = False
+        for rel, ev in events:
+            while True:
+                now_m = time.monotonic()
+                wait = base + rel - now_m
+                if wait <= 0:
+                    break
+                if now_m >= next_check:
+                    next_check = now_m + DEMO_POLL_S
+                    if _source_key(read_pointer(DEMO_TELEMETRY_POINTER)) != loaded_key:
+                        changed = True
+                        break
+                await asyncio.sleep(min(wait, max(0.0, next_check - now_m)))
+            if changed:
+                break
+            robot.apply(ev.model_copy(update={"ts": time.time(), "robot_id": robot.snapshot.robot_id}))
+        if not changed:
+            await asyncio.sleep(DEMO_LOOP_GAP_S)
+
+
 async def status_task(robot: RobotState) -> None:
     """Co STATUS_TICK_S (lub czesciej, gdy heartbeat krotszy): zmiany statusu, ktorych nic nie zglasza
     (offline przez brak wiadomosci ROS), i heartbeat `status` co WS_HEARTBEAT_S do kazdego klienta."""
@@ -503,6 +637,10 @@ async def lifespan(app: FastAPI):
     ros = start_rosbridge(loop, robot) if ROSBRIDGE_ENABLED else None
     if MQTT_ENABLED:
         tasks.append(asyncio.create_task(mqtt_task(robot)))
+    if DEMO_ROBOT_ID:
+        demo = robots[DEMO_ROBOT_ID]
+        tasks += [asyncio.create_task(status_task(demo)), asyncio.create_task(demo_task(demo))]
+        log(f"[demo] robot {DEMO_ROBOT_ID}, pointer {DEMO_TELEMETRY_POINTER}")
     yield
     for t in tasks:
         t.cancel()
@@ -632,9 +770,12 @@ async def gps_latest(robot_id: str) -> GPSFix:
          description="Adresy WHEP kamer robota. Odtwarzanie jest poza tym API (POST SDP offer na whep_url, bez klucza). "
                      "`vpn_only` to flaga z konfiguracji gatewaya (STREAMS_VPN_ONLY), nie stan sieci.")
 async def streams(robot_id: str) -> VideoStreamList:
-    get_robot(robot_id)
+    robot = get_robot(robot_id)
+    # robot demo: te same kamery, ale sciezki */demo (nagranie w petli, bez klucza)
+    suffix = "/demo" if isinstance(robot, DemoRobotState) else ""
     return VideoStreamList(streams=[
-        VideoStream(name=n, path=p, whep_url=f"{MEDIAMTX_BASE}/{p}/whep", vpn_only=STREAMS_VPN_ONLY)
+        VideoStream(name=n, path=f"{p}{suffix}", whep_url=f"{MEDIAMTX_BASE}/{p}{suffix}/whep",
+                    vpn_only=STREAMS_VPN_ONLY and not suffix)
         for n, p in VIDEO_STREAMS
     ])
 

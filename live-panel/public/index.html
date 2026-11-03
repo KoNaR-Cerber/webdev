@@ -283,8 +283,89 @@
         margin-right: 5px;
         vertical-align: middle;
       }
-      .joints {
+      .joints,
+      .recording {
         grid-column: 1/-1;
+      }
+      .recording-body {
+        padding: 0 18px 18px;
+        display: grid;
+        gap: 14px;
+      }
+      .recording-controls {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      button.record {
+        border-color: #6b3a3a;
+        background: #2a1b1f;
+      }
+      button.record:hover {
+        background: #3a2429;
+      }
+      button.record.on {
+        border-color: var(--red);
+        background: #4a2026;
+        animation: rec-pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes rec-pulse {
+        50% {
+          background: #6a2a33;
+        }
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .recordings {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .recordings th {
+        text-align: left;
+        color: var(--muted);
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        font-size: 10px;
+        text-transform: uppercase;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      .recordings td {
+        padding: 8px;
+        border-bottom: 1px solid #1a2531;
+        vertical-align: middle;
+        font-variant-numeric: tabular-nums;
+      }
+      .recordings tr.demo td {
+        background: #0f1f22;
+      }
+      .recordings .actions {
+        text-align: right;
+        white-space: nowrap;
+      }
+      .recordings .actions button {
+        padding: 5px 9px;
+        margin-left: 6px;
+      }
+      .badge {
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        padding: 2px 7px;
+        border-radius: 10px;
+        border: 1px solid var(--cyan);
+        color: var(--cyan);
+        margin-left: 6px;
+      }
+      .recording-note {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .recording-note code {
+        color: var(--text);
       }
       .joints-grid {
         display: grid;
@@ -607,6 +688,38 @@
             </div>
           </section>
         </div>
+        <section class="card recording" id="recording-card" hidden>
+          <div class="card-head">
+            <div>
+              <div class="eyebrow">Wideo + telemetria · źródło demo</div>
+              <div class="card-title">Nagrania</div>
+            </div>
+            <span class="age" id="recording-status">—</span>
+          </div>
+          <div class="recording-body">
+            <div class="recording-controls">
+              <button class="record" id="record-toggle">● Rejestruj</button>
+              <span class="recording-note" id="recording-info"></span>
+            </div>
+            <table class="recordings" id="recordings" hidden>
+              <thead>
+                <tr>
+                  <th>Nagranie (UTC)</th>
+                  <th>Długość</th>
+                  <th>Rozmiar</th>
+                  <th>Zakończone</th>
+                  <th class="actions"></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <div class="recording-note" id="recordings-empty">
+              Brak nagrań. Po zatrzymaniu nagranie trafia tu z plikami wideo (fMP4) i telemetrii (NDJSON).
+              „Ustaw jako demo" robi z niego źródło <code>video/normal_cam/demo</code> i robota
+              <code>cerber-demo</code>, odtwarzane w pętli.
+            </div>
+          </div>
+        </section>
         <section class="card joints" data-age="joints">
           <div class="card-head">
             <div>
@@ -675,6 +788,12 @@
             console.warn("Niepoprawna ramka telemetrii", err);
           }
         };
+        es.addEventListener("recording", (e) => {
+          try {
+            recording = JSON.parse(e.data);
+            renderRecording();
+          } catch {}
+        });
         es.addEventListener("connection", (e) => {
           try {
             upstream = JSON.parse(e.data).connected === true;
@@ -740,6 +859,7 @@
         history = history.filter((x) => x.t > Date.now() / 1000 - 65);
       }
       function renderStatus() {
+        if (recording) renderRecording();
         const online = upstream && state.status?.online === true;
         $("#connection").className = "pill " + (online ? "good" : "warn");
         $("#connection span").textContent = online
@@ -1075,6 +1195,111 @@
           connecting = false;
         }
       }
+      // --- nagrania: karta pojawia sie, gdy serwer przysle zdarzenie `recording` (nagrywanie skonfigurowane) ---
+      let recording = null,
+        recordingBusy = false;
+      const mb = (b) => (finite(b) ? (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + " MB" : "—");
+      const mmss = (s) =>
+        finite(s) ? Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") : "—";
+      const stoppedLabel = {
+        user: "ręcznie",
+        time: "limit czasu",
+        size: "limit rozmiaru",
+        restart: "restart panelu",
+        shutdown: "zatrzymanie panelu",
+      };
+      async function recordingCall(method, path) {
+        if (recordingBusy) return;
+        recordingBusy = true;
+        renderRecording();
+        try {
+          const res = await fetch(path, { method });
+          if (!res.ok) $("#recording-status").textContent = "Błąd: " + (await res.text());
+        } catch (e) {
+          $("#recording-status").textContent = "Błąd: " + e.message;
+        } finally {
+          recordingBusy = false;
+          renderRecording();
+        }
+      }
+      function renderRecording() {
+        if (!recording) return;
+        $("#recording-card").hidden = false;
+        const a = recording.active,
+          lim = recording.limits,
+          btn = $("#record-toggle");
+        btn.textContent = a ? "■ Zatrzymaj" : "● Rejestruj";
+        btn.classList.toggle("on", !!a);
+        btn.disabled = recordingBusy || (!a && !upstream);
+        if (a) {
+          const el = Math.max(0, Math.round((Date.now() - Date.parse(a.startedAt)) / 1000));
+          $("#recording-status").textContent = "NAGRYWANIE · " + mmss(el) + " / " + mmss(lim.maxSeconds);
+          $("#recording-info").textContent =
+            mb(a.bytes) + " / " + mb(lim.maxBytes) + " · " + a.events + " zdarzeń" +
+            (a.video ? "" : " · bez obrazu (kamera nie nadaje)");
+        } else {
+          $("#recording-status").textContent = recordingBusy
+            ? "…"
+            : recording.demo
+              ? "Demo: " + recording.demo
+              : "Gotowe";
+          $("#recording-info").textContent =
+            "Limit " + mmss(lim.maxSeconds) + " lub " + mb(lim.maxBytes) + " na nagranie · " +
+            lim.keep + " nagrań / " + mb(lim.totalBytes) + " łącznie" +
+            (upstream ? "" : " · czekam na telemetrię");
+        }
+        const list = recording.recordings || [];
+        $("#recordings").hidden = !list.length;
+        $("#recordings-empty").hidden = !!list.length;
+        const body = $("#recordings tbody");
+        body.textContent = "";
+        for (const r of list) {
+          const tr = document.createElement("tr");
+          tr.className = r.demo ? "demo" : "";
+          const cells = [
+            r.id.replace("T", " ").replace(/-(\d\d)-(\d\d)Z$/, ":$1:$2"),
+            r.active ? "trwa" : mmss(r.durationS),
+            mb((r.videoBytes || 0) + (r.telemetryBytes || 0)) + (r.video ? "" : " · bez wideo"),
+            r.active ? "—" : stoppedLabel[r.stoppedBy] || r.stoppedBy || "—",
+          ];
+          for (const text of cells) {
+            const td = document.createElement("td");
+            td.textContent = text;
+            tr.append(td);
+          }
+          if (r.demo) {
+            const badge = document.createElement("span");
+            badge.className = "badge";
+            badge.textContent = "DEMO";
+            tr.firstChild.append(badge);
+          }
+          const actions = document.createElement("td");
+          actions.className = "actions";
+          if (!r.active) {
+            const demoBtn = document.createElement("button");
+            demoBtn.textContent = r.demo ? "Wyłącz demo" : "Ustaw jako demo";
+            demoBtn.disabled = recordingBusy;
+            demoBtn.onclick = () =>
+              recordingCall(r.demo ? "DELETE" : "POST", r.demo ? "/recordings/demo" : "/recordings/" + r.id + "/demo");
+            actions.append(demoBtn);
+            const del = document.createElement("button");
+            del.textContent = "Usuń";
+            del.disabled = recordingBusy || r.demo;
+            del.title = r.demo ? "Najpierw wyłącz demo" : "";
+            del.onclick = () => {
+              if (confirm("Usunąć nagranie " + r.id + "?")) recordingCall("DELETE", "/recordings/" + r.id);
+            };
+            actions.append(del);
+          }
+          tr.append(actions);
+          body.append(tr);
+        }
+      }
+      $("#record-toggle").onclick = () =>
+        recordingCall("POST", recording?.active ? "/recordings/stop" : "/recordings");
+      setInterval(() => {
+        if (recording?.active) renderRecording();
+      }, 1000);
       $("#reconnect").onclick = () => {
         connectTelemetry();
         connectVideo();

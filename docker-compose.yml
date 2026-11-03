@@ -3,6 +3,9 @@ services:
     # wariant z ffmpeg: potrzebny do strumieni demo (runOnInit w server/mediamtx.yml)
     image: bluenviron/mediamtx:latest-ffmpeg
     container_name: ${PROJECT_NAME}-mediamtx
+    # Wolumen nagran jest wspolny z live-panel (uid 1000): katalogi musza nalezec do 1000, zeby panel mogl
+    # przenosic i kasowac pliki, ktore MediaMTX (root) tam zapisuje. API (:9997) nie ma portu na hoscie.
+    entrypoint: ["sh", "-c", "mkdir -p /recordings/mtx/video/normal_cam /recordings/demo && chown -R 1000:1000 /recordings && exec /mediamtx /mediamtx.yml"]
     ports:
       - ${SRT_PORT}:8890/udp
       - ${WEBRTC_PORT}:8889
@@ -23,6 +26,9 @@ services:
       - MTX_AUTHINTERNALUSERS_1_IPS=${ROBOT_PUBLISH_IPS:-127.0.0.1,::1}
       - MTX_AUTHINTERNALUSERS_2_USER=${DJI_PUBLISH_USER:?set DJI_PUBLISH_USER in .env}
       - MTX_AUTHINTERNALUSERS_2_PASS=${DJI_PUBLISH_PASS:?set DJI_PUBLISH_PASS in .env}
+      # login do API MediaMTX dla panelu (wpis nr 5): przelaczanie nagrywania kamery robota
+      - MTX_AUTHINTERNALUSERS_5_USER=panel
+      - MTX_AUTHINTERNALUSERS_5_PASS=${MEDIAMTX_API_PASS:?set MEDIAMTX_API_PASS in .env}
       # wyjscie RTSP (yes/no)
       - MTX_RTSP=${RTSP_ENABLE:-no}
       # strumienie demo (video/*/demo): yes/no
@@ -31,6 +37,7 @@ services:
       - ./server/mediamtx.yml:/mediamtx.yml
       - ./server/mediamtx-demo.sh:/demo.sh:ro
       - ./server/media:/media:ro
+      - recordings:/recordings
     restart: always
   mosquitto:
     image: eclipse-mosquitto:latest
@@ -71,6 +78,11 @@ services:
       # publiczny adres API (https://host) do pola `servers` w /openapi.json; pusty = bez `servers`
       - PUBLIC_BASE_URL=${GATEWAY_PUBLIC_URL:-}
       - STREAMS_VPN_ONLY=${STREAMS_VPN_ONLY:-1}
+      # robot demo: odtwarza w petli nagranie telemetrii wybrane w panelu (wskaznik w wolumenie nagran)
+      - DEMO_ROBOT_ID=${DEMO_ROBOT_ID:-cerber-demo}
+      - DEMO_TELEMETRY_POINTER=/recordings/demo/telemetry.path
+    volumes:
+      - recordings:/recordings:ro
     depends_on:
       - mosquitto
     restart: always
@@ -89,6 +101,18 @@ services:
       - CERBER_PANEL_HOSTS=${PANEL_HOSTS:-cerber.machinekind.ai}
       # jednoczesne karty/kamery (kazda karta = jedna sesja WHEP w MediaMTX)
       - CERBER_PANEL_MAX_VIEWERS=${PANEL_MAX_VIEWERS:-8}
+      # nagrywanie: wideo przez API MediaMTX (record na video/normal_cam), telemetria z ramek gatewaya;
+      # limity jednego nagrania i rotacja (najstarsze kasowane; nagranie demo nigdy)
+      - CERBER_RECORDINGS_DIR=/recordings
+      - CERBER_MEDIAMTX_API=http://mediamtx:9997
+      - CERBER_MEDIAMTX_USER=panel
+      - CERBER_MEDIAMTX_PASS=${MEDIAMTX_API_PASS:?set MEDIAMTX_API_PASS in .env}
+      - CERBER_RECORD_MAX_SECONDS=${RECORD_MAX_SECONDS:-300}
+      - CERBER_RECORD_MAX_BYTES=${RECORD_MAX_BYTES:-262144000}
+      - CERBER_RECORD_KEEP=${RECORD_KEEP:-20}
+      - CERBER_RECORD_TOTAL_BYTES=${RECORD_TOTAL_BYTES:-2147483648}
+    volumes:
+      - recordings:/recordings
     depends_on:
       - gateway
       - mediamtx
@@ -118,6 +142,9 @@ services:
 volumes:
   frontend-dist:
     name: ${PROJECT_NAME}_frontend-dist
+  # nagrania z panelu: <id>/video.mp4 + telemetry.ndjson + meta.json, mtx/ (robocze MediaMTX), demo/ (wskazniki)
+  recordings:
+    name: ${PROJECT_NAME}_recordings
   mosquitto-data: null
   mosquitto-log: null
   influxdb-data: null

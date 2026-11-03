@@ -157,7 +157,7 @@ Each camera is a MediaMTX path under `/video/`. Live cameras require the API key
 
 ### Demo streams
 
-`video/normal_cam/demo` and `video/dji01/demo` run 24/7 without hardware. Each shows a test pattern, or a looped recording when one is installed. They have the same codec, latency and WHEP flow as the live cameras. Use them to build and test your player. Open `https://cerber.machinekind.ai/video/dji01/demo/` in a browser to see one now.
+`video/normal_cam/demo` and `video/dji01/demo` run 24/7 without hardware. Each shows a test pattern, or a looped recording when one is installed. For `normal_cam` the operators can pick a recording of the real camera from the live panel; `video/normal_cam/demo` then loops that recording. Telemetry has a matching demo robot: `cerber-demo` appears in `/api/v1/robots` and serves `/telemetry/latest`, `/telemetry/stream` and `/streams` (paths under `*/demo`) from the same recording, looped, with timestamps rewritten to the current time. It needs the API key like every robot. While no recording is selected, `cerber-demo` reports `online: false`. They have the same codec, latency and WHEP flow as the live cameras. Use them to build and test your player. Open `https://cerber.machinekind.ai/video/dji01/demo/` in a browser to see one now.
 
 ### Authentication for live cameras
 

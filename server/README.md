@@ -68,6 +68,19 @@ przy starcie (`runOnInit`, restartowany po awarii). Źródło wybiera `mediamtx-
 - inaczej obraz testowy (inny wzór dla każdej ścieżki), bez dźwięku.
 
 Odtwarzanie jak każdej innej ścieżki: `https://<host>/video/dji01/demo/` albo `POST /video/dji01/demo/whep`.
+
+Źródło demo w kolejności: nagranie wybrane w panelu (`live-panel`, pierwsza linia `/recordings/demo/<kamera>.path`
+w wolumenie `recordings`), plik `server/media/<kamera>.mp4`, obraz testowy. Skrypt sprawdza wskaźnik co 2 s i
+restartuje tylko ffmpeg, bez restartu MediaMTX.
+
+## Nagrywanie z panelu
+
+API MediaMTX (`api: yes`, `:9997`) jest włączone wyłącznie w sieci docker, bez portu na hoście, z loginem `panel`
+(hasło `MEDIAMTX_API_PASS` w `.env`). Panel ustawia nim `record` na `video/normal_cam`; MediaMTX zapisuje fMP4 bez
+transkodowania do `/recordings/mtx/...` (wolumen `recordings`, `pathDefaults.record*` w `mediamtx.yml`), a panel po
+zatrzymaniu przenosi plik do katalogu nagrania. Kontener MediaMTX startuje przez `entrypoint` z `chown` wolumenu na
+uid 1000, bo panel działa jako `node` i musi przenosić oraz kasować pliki zapisane przez MediaMTX (root).
+Włączenie i wyłączenie nagrywania nie przerywa strumienia publishera (sprawdzone na v1.21.3).
 Pliki w `server/media/` nie trafiają do repo (`.gitignore`); na serwer wgrywa się je ręcznie. Wymaga obrazu
 `bluenviron/mediamtx:latest-ffmpeg`. `DEMO_STREAMS=no` w `.env` wyłącza demo bez zmiany konfiguracji
 (procesy tylko śpią). Koszt: jeden enkoder 720p na ścieżkę, ciągle.
@@ -83,6 +96,9 @@ Pliki w `server/media/` nie trafiają do repo (`.gitignore`); na serwer wgrywa s
 | `RTSP_ENABLE` | `yes` włącza nasłuch RTSP (odczyt, tylko TCP) | `no` |
 | `RTSP_PORT` | port RTSP na hoście; mapowany zawsze, ale przy `RTSP_ENABLE=no` nic w kontenerze nie słucha | `18554` |
 | `DEMO_STREAMS` | `no` wyłącza strumienie `video/*/demo` | `yes` |
+| `MEDIAMTX_API_PASS` | hasło użytkownika `panel` do API MediaMTX (wpis nr 5 `authInternalUsers`); panel przełącza nim nagrywanie | **wymagane** |
+| `RECORD_MAX_SECONDS`, `RECORD_MAX_BYTES`, `RECORD_KEEP`, `RECORD_TOTAL_BYTES` | limity nagrań z panelu: czas i rozmiar jednego, liczba i łączny rozmiar trzymanych | `300`, `262144000`, `20`, `2147483648` |
+| `DEMO_ROBOT_ID` | id robota demo w gatewayu (telemetria z nagrania w pętli) | `cerber-demo` |
 | `PANEL_HOSTS` | nazwy hostów (po przecinku), pod którymi przeglądarka otwiera panel podglądu `/`; inny nagłówek `Host` dostaje 403 | `cerber.machinekind.ai` |
 | `PANEL_ROBOT_ID` | robot pokazywany w panelu podglądu | `cerber-lite3-01` |
 | `PANEL_MAX_VIEWERS` | jednoczesne karty panelu (każda = jedna sesja WHEP) | `8` |

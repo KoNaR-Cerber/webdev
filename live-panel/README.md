@@ -94,6 +94,33 @@ Zmienne serwera (wszystkie poza kluczem opcjonalne):
 (nawigacja) działa; żądania cross-site inne niż nawigacja (fetch, EventSource, formularz) są odrzucane.
 Hasło sprawdza Caddy, nie panel; panel ufa, że przed nim stoi tylko reverse proxy.
 
+## Nagrywanie i demo (tylko na serwerze)
+
+Karta „Nagrania" pojawia się, gdy serwer ma `CERBER_RECORDINGS_DIR` (w compose: wolumen `recordings`).
+„Rejestruj" włącza nagrywanie kamery `video/normal_cam` w MediaMTX (przez jego API, plik fMP4 bez
+transkodowania) i zapis każdej ramki telemetrii z gatewaya do NDJSON (koperty WS, jedna na linię, pierwsza to
+snapshot). „Zatrzymaj", limit czasu albo limit rozmiaru kończy nagranie: katalog `<id>/` z `video.mp4`,
+`telemetry.ndjson` i `meta.json`, gdzie `<id>` to czas startu UTC (`2026-11-03T10-05-07Z`). Bez nadającej
+kamery nagranie ma samą telemetrię.
+
+„Ustaw jako demo" zapisuje dwa pliki-wskaźniki w `demo/`: `normal_cam.path` czyta skrypt demo MediaMTX
+(ścieżka `video/normal_cam/demo` odtwarza nagranie w pętli zamiast obrazu testowego), `telemetry.path` czyta
+gateway (robot `cerber-demo` odtwarza telemetrię w pętli z czasami przesuniętymi na teraz). Zmiana wyboru działa
+bez restartów. Nagranie ustawione jako demo nie podlega rotacji i nie da się go usunąć, dopóki jest demo.
+
+| Zmienna | Znaczenie | Domyślnie |
+|---|---|---|
+| `CERBER_RECORDINGS_DIR` | katalog nagrań (wspólny wolumen z MediaMTX i gatewayem); brak = karta ukryta | brak |
+| `CERBER_MEDIAMTX_API`, `CERBER_MEDIAMTX_USER`, `CERBER_MEDIAMTX_PASS` | API MediaMTX i login z uprawnieniem `api` | `http://mediamtx:9997`, bez loginu |
+| `CERBER_RECORD_MAX_SECONDS` | limit czasu jednego nagrania | `300` |
+| `CERBER_RECORD_MAX_BYTES` | limit rozmiaru (wideo + telemetria) jednego nagrania | `262144000` (250 MB) |
+| `CERBER_RECORD_KEEP` | ile nagrań zostaje (rotacja najstarszych po każdym zatrzymaniu) | `20` |
+| `CERBER_RECORD_TOTAL_BYTES` | łączny rozmiar nagrań, powyżej rotacja | `2147483648` (2 GB) |
+
+Endpointy panelu (za tym samym hasłem co podgląd): `GET /recordings` (stan, limity, lista), `POST /recordings`
+(start), `POST /recordings/stop`, `POST /recordings/<id>/demo`, `DELETE /recordings/demo`,
+`DELETE /recordings/<id>`. Stan idzie też do kart przez SSE jako zdarzenie `recording`.
+
 ## Sprawdzenie
 
 ```sh
@@ -107,6 +134,7 @@ robota, działającego odbiornika/rosbridge i strumienia kamery po stronie serwe
 
 - `public/index.html` — interfejs, wykresy i klient WebRTC;
 - `server.mjs` — lokalny serwer, uwierzytelnienie API i przekazywanie zdarzeń;
-- `server.test.mjs` — testy serwera;
+- `recorder.mjs` — nagrywanie, lista nagrań, wybór demo i rotacja;
+- `server.test.mjs`, `recorder.test.mjs` — testy;
 - `Dockerfile` — obraz dla serwisu `live-panel` w `docker-compose.yml`;
 - `.env.example` — konfiguracja bez credentiali.
