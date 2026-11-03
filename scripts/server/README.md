@@ -5,7 +5,7 @@ działa jako on). Nie zawierają adresów ani haseł: wszystko bierze się z `.e
 
 | Skrypt | Co robi |
 |---|---|
-| `deploy-staging.sh [serwis…]` | `git fetch` + `reset --hard` do `fork/staging` w katalogu stacku, dopisuje do `.env` brakujące wartości, które da się wygenerować (`MEDIAMTX_API_PASS`), `docker compose up -d --build` wskazanych serwisów (bez argumentów: wszystkich), czeka na build frontendu, sprawdza kody odpowiedzi z zewnątrz |
+| `deploy-staging.sh [serwis…]` | `git fetch` + `merge --ff-only` z `fork/staging` w katalogu stacku (ręczne zmiany w checkoucie zatrzymują deploy, nie znikają), dopisuje do `.env` brakujące wartości, które da się wygenerować (`MEDIAMTX_API_PASS`), `docker compose up -d --build` wskazanych serwisów (bez argumentów: wszystkich), czeka na build frontendu, sprawdza kody odpowiedzi z zewnątrz |
 | `caddy-panel-password.sh [rollback]` | pyta o login i hasło panelu podglądu, hashuje w kontenerze Caddy (`caddy hash-password`), podmienia linię w bloku `basic_auth`, waliduje i przeładowuje; kopia `Caddyfile.bak-panel-password` |
 
 Zmienne (opcjonalne): `STACK`, `STACK_USER`, `GIT_REMOTE`, `GIT_BRANCH`, `HOST`, `CADDYFILE`, `CADDY_CONTAINER`.
