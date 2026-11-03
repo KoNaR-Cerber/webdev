@@ -254,3 +254,54 @@ test('a session location on a foreign origin is refused even when it looks like 
   assert.equal((await postOffer(base)).status, 502);
   assert.ok(requests.every(call => new URL(call.url).origin === 'http://mediamtx:8889'));
 });
+
+test('recording endpoints drive the recorder and push state over SSE', async t => {
+  const { mkdtemp, mkdir } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { createRecorder } = await import('./recorder.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'cerber-panel-rec-'));
+  await mkdir(join(dir, 'mtx', 'video', 'normal_cam'), { recursive: true });
+  const recorder = createRecorder({
+    dir, mediamtxApi: 'http://mediamtx:9997', pollMs: 30, finishWaitMs: 100,
+    fetchImpl: async (url, init) => init.method === 'GET' ? Response.json({ ready: false }) : Response.json({}),
+  });
+  const { base, sockets } = await fixture(t, { recorder });
+  const post = (path) => request(base, path, { method: 'POST' });
+  assert.equal((await post('/recordings')).status, 503, 'no upstream yet');
+  sockets[0].open();
+  sockets[0].message('snapshot', { imu: null });
+  const stream = await events(base);
+  t.after(() => stream.close());
+  await stream.next(); await stream.next();
+  assert.match(await stream.next(), /event: recording\ndata: .*"active":null/);
+  const started = await post('/recordings');
+  assert.equal(started.status, 201);
+  const { id } = JSON.parse(started.body);
+  assert.equal((await post('/recordings')).status, 409);
+  assert.match(await stream.next(), new RegExp(`event: recording\\ndata: .*"active":\\{"id":"${id}"`));
+  sockets[0].message('imu', { sample: 1 });
+  await stream.next();
+  const health = JSON.parse((await request(base, '/health-local')).body);
+  assert.equal(health.recording.id, id);
+  const status = JSON.parse((await request(base, '/recordings')).body);
+  assert.equal(status.active.id, id);
+  assert.deepEqual(status.limits, recorder.limits);
+  const stopped = await post('/recordings/stop');
+  assert.equal(stopped.status, 200);
+  assert.equal(JSON.parse(stopped.body).events, 2, 'snapshot seed + imu');
+  assert.equal((await post('/recordings/stop')).status, 409);
+  assert.equal((await post(`/recordings/${id}/demo`)).status, 204);
+  assert.equal((await request(base, `/recordings/${id}`, { method: 'DELETE' })).status, 409, 'demo source is protected');
+  assert.equal((await request(base, '/recordings/demo', { method: 'DELETE' })).status, 204);
+  assert.equal((await request(base, `/recordings/${id}`, { method: 'DELETE' })).status, 204);
+  assert.equal((await post('/recordings/2000-01-01T00-00-00Z/demo')).status, 404);
+  assert.equal((await post('/recordings/../etc/demo')).status, 404);
+  assert.deepEqual(JSON.parse((await request(base, '/recordings')).body).recordings, []);
+});
+
+test('recording endpoints are absent without a recorder', async t => {
+  const { base } = await fixture(t);
+  assert.equal((await request(base, '/recordings')).status, 404);
+  assert.equal((await request(base, '/recordings', { method: 'POST' })).status, 404);
+});
