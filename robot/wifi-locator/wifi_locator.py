@@ -187,8 +187,15 @@ def own_mac(interface):
 
 def scan(cfg):
     if cfg.scanner == "iw":
-        result = subprocess.run([cfg.iw, "dev", cfg.interface, "scan"], capture_output=True, text=True,
-                                timeout=30, check=True)
+        # A triggered scan takes ~9 s on the Lite3 radio in AP mode and can fail or stall while the
+        # driver is busy; then the cached results of the last scan (`scan dump`) are good enough.
+        try:
+            result = subprocess.run([cfg.iw, "dev", cfg.interface, "scan"], capture_output=True, text=True,
+                                    timeout=45, check=True)
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as ex:
+            log("scan_trigger_failed", error=f"{type(ex).__name__}"[:60], fallback="scan dump")
+            result = subprocess.run([cfg.iw, "dev", cfg.interface, "scan", "dump"], capture_output=True,
+                                    text=True, timeout=15, check=True)
         return parse_iw(result.stdout, cfg.max_aps, own_mac(cfg.interface))
     cmd = [cfg.nmcli, "-t", "-f", "BSSID,SIGNAL,CHAN", "dev", "wifi", "list", "--rescan", "auto"]
     if cfg.interface:

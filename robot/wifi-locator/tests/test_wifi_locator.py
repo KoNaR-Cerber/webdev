@@ -72,6 +72,24 @@ def test_parse_iw():
     assert (wl.channel_of(2412), wl.channel_of(2484), wl.channel_of(5500), wl.channel_of(900)) == (1, 14, 100, None)
 
 
+def test_iw_scan_falls_back_to_dump(monkeypatch):
+    calls = []
+
+    class Done:
+        stdout = IW
+
+    def run(cmd, **kw):
+        calls.append(cmd[-1])
+        if cmd[-1] == "scan":
+            raise wl.subprocess.TimeoutExpired(cmd, kw["timeout"])
+        return Done()
+
+    monkeypatch.setattr(wl.subprocess, "run", run)
+    monkeypatch.setattr(wl, "own_mac", lambda interface: None)
+    aps = wl.scan(cfg(CERBER_WIFI_SCANNER="iw", CERBER_WIFI_INTERFACE="wlan0"))
+    assert calls == ["scan", "dump"] and len(aps) == 3
+
+
 def test_config():
     c = cfg()
     assert (c.mqtt_port, c.mqtt_topic, c.interface, c.scan_interval) == (1883, "cerber/gps/data", None, 30.0)
