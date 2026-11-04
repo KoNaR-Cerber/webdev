@@ -62,16 +62,10 @@
 
     # Wideo: WHEP (WebRTC) z MediaMTX. Sygnalizacja idzie tu po HTTPS, same media po ICE na porcie
     # STREAM_PORT (UDP/TCP) wprost do hosta, poza Caddy.
-    # Wideo. Demo (video/*/demo...) publicznie bez klucza. Kamery robota i dron: z VPN bez klucza,
+    # Wideo. Kamery robota, dron i demo (video/*/demo; nagranie demo moze pokazywac wrazliwe miejsca): z VPN bez klucza,
     # z internetu z naglowkiem X-API-Key (ten sam klucz co telemetria; sprawdza go gateway przez forward_auth,
     # GET /api/v1/robots -> 2xx = OK, 401 wraca do klienta). Cialo POST (SDP) idzie dalej nienaruszone.
     handle /video/* {
-        @demo path /video/*/demo /video/*/demo/ /video/*/demo/* /video/*/demo/*/*
-        handle @demo {
-            reverse_proxy cerber-staging-mediamtx:8889 {
-                header_down Access-Control-Allow-Headers "Authorization, Content-Type, If-Match, X-API-Key"
-            }
-        }
         @vpn_video remote_ip <VPN_CIDR>
         handle @vpn_video {
             reverse_proxy cerber-staging-mediamtx:8889 {

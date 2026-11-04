@@ -731,7 +731,10 @@ app = FastAPI(
     description=(
         "Publiczne, read-only API telemetrii robota Cerber (DEEP Robotics Lite3). "
         "Dane pochodza z ROS 2 (rosbridge) i MQTT po stronie VPN. Sterowanie robotem "
-        "nie jest wystawione. Autoryzacja: naglowek `X-API-Key` (REST) lub query `api_key` (WebSocket)."
+        "nie jest wystawione. Autoryzacja: naglowek `X-API-Key` (REST) lub query `api_key` (WebSocket). "
+        "Wideo kamer (WebRTC/WHEP pod `/video/<sciezka>/whep`, adresy z `/streams`) jest poza tym API, "
+        "ale z internetu wymaga tego samego naglowka `X-API-Key` na kazdym zadaniu sygnalizacji, "
+        "takze dla sciezek demo (`*/demo`)."
     ),
     lifespan=lifespan,
 )
@@ -794,11 +797,11 @@ async def gps_latest(robot_id: str) -> GPSFix:
 @app.get("/api/v1/robots/{robot_id}/streams", response_model=VideoStreamList, tags=["video"],
          dependencies=[Depends(require_key)], responses=COMMON_ERRORS,
          summary="Strumienie wideo robota (WHEP)",
-         description="Adresy WHEP kamer robota. Odtwarzanie jest poza tym API (POST SDP offer na whep_url, bez klucza). "
+         description="Adresy WHEP kamer robota. Odtwarzanie jest poza tym API (POST SDP offer na whep_url z naglowkiem X-API-Key). "
                      "`vpn_only` to flaga z konfiguracji gatewaya (STREAMS_VPN_ONLY), nie stan sieci.")
 async def streams(robot_id: str) -> VideoStreamList:
     robot = get_robot(robot_id)
-    # robot demo: te same kamery, ale sciezki */demo (nagranie w petli, bez klucza)
+    # robot demo: te same kamery, ale sciezki */demo (nagranie w petli; klucz jak dla kamer na zywo)
     suffix = "/demo" if isinstance(robot, DemoRobotState) else ""
     return VideoStreamList(streams=[
         VideoStream(name=n, path=f"{p}{suffix}", whep_url=f"{MEDIAMTX_BASE}/{p}{suffix}/whep",

@@ -18,8 +18,9 @@ dron DJI        --RTMP :1935 (internet, login+hasło)-->          --RTSP :8554 (
 | `video/dji01/demo`, `video/normal_cam/demo` | ffmpeg w kontenerze (`mediamtx-demo.sh`, `runOnInit`) | SRT z localhost | tylko z wnętrza kontenera; z zewnątrz odrzucane |
 
 MediaMTX sam nie wymaga uwierzytelnienia do odczytu; dostęp ogranicza Caddy (decyzja z 2026-11-02): ścieżki
-`*/demo` publicznie bez klucza, kamery na żywo z internetu tylko z nagłówkiem `X-API-Key` (ten sam klucz co
-telemetria, sprawdzany przez gateway przez `forward_auth`), z VPN bez klucza. Prefiks `video/` jest wspólny, bo reverse proxy kieruje `/video/*`
+Z internetu każda ścieżka, także `*/demo`, tylko z nagłówkiem `X-API-Key` (ten sam klucz co
+telemetria, sprawdzany przez gateway przez `forward_auth`), z VPN bez klucza. Demo jest za kluczem od 2026-11-04,
+bo nagranie wybrane w panelu może pokazywać wrażliwe miejsca. Prefiks `video/` jest wspólny, bo reverse proxy kieruje `/video/*`
 do MediaMTX; dzięki temu nowa ścieżka nie wymaga zmian w Caddy. Preflight CORS (`OPTIONS`) na `/video/*` przechodzi bez klucza,
 a Caddy dopisuje `X-API-Key` do `Access-Control-Allow-Headers`, żeby odtwarzacze w przeglądarce z innych originów mogły wysłać klucz.
 
