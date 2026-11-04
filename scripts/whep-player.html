@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <title>Cerber · player WHEP</title>
+  <style>
+    body { margin: 0; background: #0b1016; color: #dfe6ee; font: 14px system-ui, sans-serif; }
+    form { display: flex; gap: 8px; padding: 12px; flex-wrap: wrap; align-items: center; }
+    input { padding: 6px 8px; background: #141c26; color: inherit; border: 1px solid #2b3a4c; border-radius: 4px; }
+    input[name=key] { width: 28em; }
+    input[name=path] { width: 16em; }
+    button { padding: 6px 12px; }
+    video { display: block; width: 100%; max-height: 80vh; background: #000; }
+    #status { padding: 8px 12px; color: #9fb0c3; }
+  </style>
+</head>
+<body>
+  <!-- Lokalny player WHEP. Serwuj go z localhost, nie z pliku (origin "null" nie przechodzi CORS w MediaMTX):
+         cd scripts && python3 -m http.server 8899 --bind 127.0.0.1   ->  http://127.0.0.1:8899/whep-player.html
+       Wpisz klucz API i ścieżkę (np. video/normal_cam/demo). Klucz idzie tylko w nagłówku X-API-Key do podanego
+       hosta; nic nie jest zapisywane. -->
+  <form id="f">
+    <input name="host" value="https://cerber.machinekind.ai" />
+    <input name="path" value="video/normal_cam/demo" />
+    <input name="key" type="password" placeholder="klucz API (X-API-Key)" autocomplete="off" />
+    <button>Odtwórz</button>
+  </form>
+  <div id="status">—</div>
+  <video autoplay muted playsinline controls></video>
+  <script>
+    const video = document.querySelector("video"), status = document.querySelector("#status");
+    let stop = null;
+    async function play(host, path, key) {
+      const headers = { "Content-Type": "application/sdp", "X-API-Key": key };
+      const pc = new RTCPeerConnection();
+      pc.addTransceiver("video", { direction: "recvonly" });
+      pc.ontrack = (e) => { video.srcObject = e.streams[0]; };
+      pc.onconnectionstatechange = () => { status.textContent = "WebRTC: " + pc.connectionState; };
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const res = await fetch(`${host}/${path}/whep`, { method: "POST", headers, body: offer.sdp });
+      if (res.status === 401) throw new Error("401: zły lub brak klucza");
+      if (res.status === 404) throw new Error("404: nikt nie nadaje na " + path);
+      if (res.status !== 201) throw new Error("HTTP " + res.status);
+      const session = new URL(res.headers.get("Location"), res.url);
+      await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+      return () => { fetch(session, { method: "DELETE", headers, keepalive: true }).catch(() => {}); pc.close(); };
+    }
+    document.querySelector("#f").onsubmit = async (e) => {
+      e.preventDefault();
+      if (stop) { stop(); stop = null; }
+      const d = new FormData(e.target);
+      status.textContent = "Łączenie…";
+      try { stop = await play(d.get("host").replace(/\/$/, ""), d.get("path").replace(/^\/|\/$/g, ""), d.get("key")); }
+      catch (err) { status.textContent = "Błąd: " + err.message; }
+    };
+    window.addEventListener("pagehide", () => stop && stop());
+  </script>
+</body>
+</html>
