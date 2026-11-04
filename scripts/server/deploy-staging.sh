@@ -41,4 +41,4 @@ echo "--- z zewnatrz:"
 for p in / /teleop/ /health /docs /video/normal_cam/demo/; do
   curl -sS -m 10 -o /dev/null -w "  $p -> %{http_code}\n" "https://$HOST$p"
 done
-echo "(oczekiwane: / 401 bez hasla, /teleop/ 403 spoza VPN, reszta 200)"
+echo "(oczekiwane: / 401 bez hasla, /teleop/ 403 spoza VPN, demo 401 bez klucza, reszta 200)"
