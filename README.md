@@ -13,6 +13,9 @@ Z panelu da się nagrać do 5 minut wideo i telemetrii i ustawić nagranie jako 
 demo (`video/normal_cam/demo` i robot `cerber-demo` w gatewayu); opis w
 [live-panel/README.md](live-panel/README.md).
 
+Instrukcja obsługi panelu i nagrywania dla operatora (bez wiedzy technicznej):
+[docs/INSTRUKCJA_OPERATORA.md](docs/INSTRUKCJA_OPERATORA.md).
+
 Lokalnie, z własnym kluczem API:
 
 ```sh
