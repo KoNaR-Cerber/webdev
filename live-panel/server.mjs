@@ -10,6 +10,7 @@ export const DEFAULT_ROBOT_ID = 'cerber-lite3-01';
 const CAMERA_PATH = '/video/normal_cam/whep';
 const EVENT_TYPES = new Set(['snapshot', 'status', 'imu', 'joints', 'odometry', 'ultrasound', 'gps', 'gps_receiver', 'ptz', 'sensors_alive']);
 const MAX_BODY = 65_536;
+const PHONE_MAX_BODY = 4_096;
 const MAX_RESPONSE = 131_072;
 const MAX_BUFFER = 262_144;
 
@@ -31,6 +32,20 @@ export function cameraSessionUrl(location, cameraUrl = `${DEFAULT_API_ORIGIN}${C
     throw new Error('Unexpected camera session');
   }
   return url.href;
+}
+
+// Cialo POST /gps/phone -> cialo POST gatewaya (GpsReport); null, gdy nie jest to sensowna pozycja.
+export function phoneFix(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const num = (v, min, max) => (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : undefined);
+  const latitude = num(body.latitude, -90, 90), longitude = num(body.longitude, -180, 180);
+  const accuracy_m = num(body.accuracy_m, 0, 10_000);
+  if (latitude === undefined || longitude === undefined || accuracy_m === undefined) return null;
+  const fix = { latitude, longitude, accuracy_m };
+  const altitude = num(body.altitude, -500, 10_000);
+  if (altitude !== undefined) fix.altitude = altitude;
+  if (typeof body.time === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{1,6})?Z$/.test(body.time)) fix.time = body.time;
+  return fix;
 }
 
 async function boundedText(stream, limit) {
@@ -74,6 +89,7 @@ export async function createPanelServer({
   }
   if (!Number.isInteger(maxViewers) || maxViewers < 1 || maxViewers > 64) throw new Error('CERBER_PANEL_MAX_VIEWERS must be 1-64');
   const cameraUrl = `${videoOrigin}${CAMERA_PATH}`;
+  const phoneGpsUrl = `${apiOrigin}/api/v1/robots/${robotId}/gps`;
   const streamUrl = `${apiOrigin.replace(/^http/, 'ws')}/api/v1/robots/${robotId}/telemetry/stream?api_key=${encodeURIComponent(apiKey)}`;
   const page = html ?? await readFile(htmlPath, 'utf8');
   if (page.includes(apiKey)) throw new Error('Panel HTML must not contain the API key.');
@@ -285,7 +301,37 @@ export async function createPanelServer({
       await releaseSession(req.url.slice('/session/'.length));
       return reply(res, 204);
     }
+    if (req.method === 'POST' && req.url === '/gps/phone') return handlePhoneGps(req, res);
     reply(res, 404, 'Not found');
+  }
+  // Pozycja z telefonu operatora stojacego przy robocie (zastepstwo za odbiornik GNSS): przegladarka POST-uje
+  // wspolrzedne tutaj, panel dodaje klucz i przekazuje do gatewaya, ktory publikuje je na MQTT jak kazdy fix.
+  async function handlePhoneGps(req, res) {
+    if (req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json') return reply(res, 415, 'Expected JSON');
+    if (Number(req.headers['content-length']) > PHONE_MAX_BODY) return reply(res, 413, 'Body too large', undefined, { Connection: 'close' });
+    let body;
+    try {
+      body = JSON.parse(await boundedText(req, PHONE_MAX_BODY));
+    } catch {
+      return reply(res, 400, 'Invalid JSON');
+    }
+    const fix = phoneFix(body);
+    if (!fix) return reply(res, 422, 'Invalid position');
+    try {
+      const remote = await fetchImpl(phoneGpsUrl, {
+        method: 'POST', redirect: 'error',
+        headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(fix), signal: AbortSignal.timeout(8_000),
+      });
+      const text = await boundedText(remote.body, MAX_RESPONSE);
+      if (text.includes(apiKey)) throw new Error('Reflected secret');
+      if (remote.status === 202) return reply(res, 202, text, 'application/json');
+      if (remote.status === 503) return reply(res, 503, 'Broker telemetrii niedostępny');
+      if (remote.status === 422) return reply(res, 422, 'Pozycja odrzucona przez API');
+      return reply(res, 502, 'Gateway error');
+    } catch {
+      return reply(res, 502, 'Gateway unavailable');
+    }
   }
   const json = (res, status, data) => reply(res, status, JSON.stringify(data), 'application/json');
   async function handleRecordings(req, res) {

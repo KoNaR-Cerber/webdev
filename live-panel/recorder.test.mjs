@@ -156,3 +156,19 @@ test('recover finalizes a recording left active by a crash and switches MediaMTX
   assert.equal(meta.videoBytes, 42);
   assert.equal((await stat(join(dir, id, 'video.mp4'))).size, 42);
 });
+
+test('default limits: 10 minutes, 600 MB per recording, keep 30 / 6 GB', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'cerber-rec-'));
+  const recorder = createRecorder({ dir, mediamtxApi: 'http://mediamtx:9997', fetchImpl: async () => Response.json({}) });
+  t.after(() => recorder.close());
+  assert.deepEqual(recorder.limits, {
+    maxSeconds: 600,
+    maxBytes: 600 * 1024 * 1024,
+    keep: 30,
+    totalBytes: 6 * 1024 * 1024 * 1024,
+  });
+  const custom = createRecorder({ dir, mediamtxApi: 'http://mediamtx:9997', maxSeconds: 42, keep: 3, fetchImpl: async () => Response.json({}) });
+  t.after(() => custom.close());
+  assert.equal(custom.limits.maxSeconds, 42);
+  assert.equal(custom.limits.keep, 3);
+});

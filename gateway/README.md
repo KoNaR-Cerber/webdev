@@ -31,6 +31,7 @@ Regeneracja po zmianie modeli: `python export_contract.py`.
 | GET | `/api/v1/robots/{robot_id}` | `RobotSummary` (`online` i `last_seen` jak w `status`, patrz niżej) |
 | GET | `/api/v1/robots/{robot_id}/telemetry/latest` | `TelemetrySnapshot` — ostatni znany stan, sekcje `null` dopóki nie przyjdą; pole `status` z chwili odpowiedzi |
 | GET | `/api/v1/robots/{robot_id}/gps/latest` | `GPSFix` albo 404 |
+| POST | `/api/v1/robots/{robot_id}/gps` | ciało `GpsReport` (pozycja z telefonu operatora stojącego przy robocie, gdy odbiornik GNSS nie działa) → 202 z `GPSFix` (`source: phone`); gateway publikuje ją na `MQTT_GPS_TOPIC`, więc trafia do snapshotu, WS, bazy i nagrań jak fix z robota; 503 bez brokera, 409 dla robota demo. Panel wysyła to przez `/gps/phone` |
 | GET | `/api/v1/robots/{robot_id}/streams` | `VideoStreamList` — adresy WHEP; `vpn_only` z `STREAMS_VPN_ONLY` |
 | WS | `/api/v1/robots/{robot_id}/telemetry/stream?api_key=…` | ramki `TelemetryEventEnvelope`: pierwsza `snapshot` (z `status`), potem `imu` / `joints` / `odometry` / `ultrasound` / `ptz` / `gps` / `sensors_alive` (każdy typ najwyżej raz na `WS_THROTTLE_S`, patrz niżej) oraz `status` (przy zmianie i co `WS_HEARTBEAT_S`); ramki od klienta są ignorowane (max 4096 B) |
 

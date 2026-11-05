@@ -116,10 +116,10 @@ bez restartów. Nagranie ustawione jako demo nie podlega rotacji i nie da się g
 |---|---|---|
 | `CERBER_RECORDINGS_DIR` | katalog nagrań (wspólny wolumen z MediaMTX i gatewayem); brak = karta ukryta | brak |
 | `CERBER_MEDIAMTX_API`, `CERBER_MEDIAMTX_USER`, `CERBER_MEDIAMTX_PASS` | API MediaMTX i login z uprawnieniem `api` | `http://mediamtx:9997`, bez loginu |
-| `CERBER_RECORD_MAX_SECONDS` | limit czasu jednego nagrania | `300` |
-| `CERBER_RECORD_MAX_BYTES` | limit rozmiaru (wideo + telemetria) jednego nagrania | `262144000` (250 MB) |
-| `CERBER_RECORD_KEEP` | ile nagrań zostaje (rotacja najstarszych po każdym zatrzymaniu) | `20` |
-| `CERBER_RECORD_TOTAL_BYTES` | łączny rozmiar nagrań, powyżej rotacja | `2147483648` (2 GB) |
+| `CERBER_RECORD_MAX_SECONDS` | limit czasu jednego nagrania | `600` |
+| `CERBER_RECORD_MAX_BYTES` | limit rozmiaru (wideo + telemetria) jednego nagrania | `629145600` (600 MB) |
+| `CERBER_RECORD_KEEP` | ile nagrań zostaje (rotacja najstarszych po każdym zatrzymaniu) | `30` |
+| `CERBER_RECORD_TOTAL_BYTES` | łączny rozmiar nagrań, powyżej rotacja | `6442450944` (6 GB) |
 
 Endpointy panelu (za tym samym hasłem co podgląd): `GET /recordings` (stan, limity, lista), `POST /recordings`
 (start), `POST /recordings/stop`, `POST /recordings/<id>/demo`, `DELETE /recordings/demo`,
