@@ -1,4 +1,6 @@
 import http from 'node:http';
+import { createReadStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -345,8 +347,23 @@ export async function createPanelServer({
       }
       if (method === 'POST' && url === '/recordings/stop') return json(res, 200, await recorder.stop('user'));
       if (method === 'DELETE' && url === '/recordings/demo') { await recorder.setDemo(null); return reply(res, 204); }
+      // playlista demo: POST doklada nagranie na koniec, DELETE wyjmuje je (reszta zachowuje kolejnosc)
       const demo = /^\/recordings\/([A-Za-z0-9-]{20})\/demo$/.exec(url ?? '');
-      if (method === 'POST' && demo) { await recorder.setDemo(demo[1]); return reply(res, 204); }
+      if (method === 'POST' && demo) { await recorder.addDemo(demo[1]); return reply(res, 204); }
+      if (method === 'DELETE' && demo) { await recorder.removeDemo(demo[1]); return reply(res, 204); }
+      // pobieranie plikow gotowego nagrania (za basic_auth Caddy, jak caly panel)
+      const file = /^\/recordings\/([A-Za-z0-9-]{20})\/(video\.mp4|telemetry\.ndjson|meta\.json)$/.exec(url ?? '');
+      if (method === 'GET' && file) {
+        const { path, size, type } = await recorder.file(file[1], file[2]);
+        if (res.destroyed) return;
+        res.writeHead(200, {
+          'Content-Type': type, 'Content-Length': size, 'Cache-Control': 'no-store',
+          'Content-Disposition': `attachment; filename="${file[1]}-${file[2]}"`,
+          'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+        });
+        await pipeline(createReadStream(path), res).catch(() => res.destroy());
+        return;
+      }
       const one = /^\/recordings\/([A-Za-z0-9-]{20})$/.exec(url ?? '');
       if (method === 'DELETE' && one) { await recorder.remove(one[1]); return reply(res, 204); }
       return reply(res, 404, 'Not found');

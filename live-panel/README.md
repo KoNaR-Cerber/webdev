@@ -107,10 +107,19 @@ snapshot). „Zatrzymaj", limit czasu albo limit rozmiaru kończy nagranie: kata
 `telemetry.ndjson` i `meta.json`, gdzie `<id>` to czas startu UTC (`2026-11-03T10-05-07Z`). Bez nadającej
 kamery nagranie ma samą telemetrię.
 
-„Ustaw jako demo" zapisuje dwa pliki-wskaźniki w `demo/`: `normal_cam.path` czyta skrypt demo MediaMTX
-(ścieżka `video/normal_cam/demo` odtwarza nagranie w pętli zamiast obrazu testowego), `telemetry.path` czyta
-gateway (robot `cerber-demo` odtwarza telemetrię w pętli z czasami przesuniętymi na teraz). Zmiana wyboru działa
-bez restartów. Nagranie ustawione jako demo nie podlega rotacji i nie da się go usunąć, dopóki jest demo.
+Pliki gotowego nagrania można pobrać z panelu: `GET /recordings/<id>/video.mp4|telemetry.ndjson|meta.json`
+(linki „Wideo ↓” i „Telemetria ↓” w tabeli; `Content-Disposition: attachment`). Nagranie w toku nie jest dostępne.
+
+„Do demo" dokłada nagranie na koniec playlisty demo (do 5 nagrań, kolejność klikania), „Usuń z demo" wyjmuje
+je, „Wyczyść demo" opróżnia playlistę. Playlista to dwa pliki-wskaźniki w `demo/`, jedna ścieżka na linię w
+kolejności odtwarzania: `normal_cam.path` czyta skrypt demo MediaMTX (ścieżka `video/normal_cam/demo` odtwarza
+nagrania po kolei w pętli przez demuxer concat ffmpeg zamiast obrazu testowego; nagrania bez wideo są w nim
+pomijane), `telemetry.path` czyta gateway (robot `cerber-demo` odtwarza telemetrię nagrań po kolei w pętli
+z czasami przesuniętymi na teraz, z sekundą przerwy między nagraniami). Zmiana playlisty działa bez restartów.
+Nagrania z playlisty nie podlegają rotacji i nie da się ich usunąć, dopóki tam są. API panelu:
+`POST /recordings/<id>/demo` (dołóż), `DELETE /recordings/<id>/demo` (wyjmij), `DELETE /recordings/demo` (wyczyść);
+w `GET /recordings` pole `demo` to lista id w kolejności, `maxDemo` to limit, a każde nagranie ma `demo` =
+pozycja (od 1) albo `null`.
 
 | Zmienna | Znaczenie | Domyślnie |
 |---|---|---|

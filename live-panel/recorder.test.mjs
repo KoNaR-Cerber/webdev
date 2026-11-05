@@ -107,8 +107,8 @@ test('demo selection writes pointer files for MediaMTX and the gateway, and prot
   await recorder.setDemo(meta.id);
   assert.equal((await readFile(join(dir, 'demo', 'normal_cam.path'), 'utf8')).trim(), join(dir, meta.id, 'video.mp4'));
   assert.equal((await readFile(join(dir, 'demo', 'telemetry.path'), 'utf8')).trim(), join(dir, meta.id, 'telemetry.ndjson'));
-  assert.equal((await recorder.status()).demo, meta.id);
-  assert.equal((await recorder.list())[0].demo, true);
+  assert.deepEqual((await recorder.status()).demo, [meta.id]);
+  assert.equal((await recorder.list())[0].demo, 1);
   await assert.rejects(recorder.remove(meta.id), { code: 409 });
   await assert.rejects(recorder.setDemo('2000-01-01T00-00-00Z'), { code: 404 });
   await assert.rejects(recorder.setDemo('../etc'), { code: 404 });
@@ -171,4 +171,49 @@ test('default limits: 10 minutes, 600 MB per recording, keep 30 / 6 GB', async t
   t.after(() => custom.close());
   assert.equal(custom.limits.maxSeconds, 42);
   assert.equal(custom.limits.keep, 3);
+});
+
+test('demo playlist: add appends in click order up to five, remove keeps the order, files are downloadable', async t => {
+  const { dir, recorder, mtxWrite } = await fixture(t, { finishWaitMs: 100 });
+  const ids = [];
+  for (let i = 0; i < 6; i++) {
+    if (i) await delay(1050); // ids are second-resolution
+    await recorder.start();
+    if (i !== 2) await mtxWrite(`v${i}.mp4`, 10 + i);
+    ids.push((await recorder.stop()).id);
+  }
+  await recorder.addDemo(ids[3]);
+  await recorder.addDemo(ids[1]);
+  await recorder.addDemo(ids[2]); // without video: telemetry only
+  await recorder.addDemo(ids[1]); // already there: no-op
+  assert.deepEqual((await recorder.status()).demo, [ids[3], ids[1], ids[2]]);
+  assert.equal((await recorder.status()).maxDemo, 5);
+  const telemetry = (await readFile(join(dir, 'demo', 'telemetry.path'), 'utf8')).trim().split('\n');
+  assert.deepEqual(telemetry, [ids[3], ids[1], ids[2]].map(id => join(dir, id, 'telemetry.ndjson')));
+  const video = (await readFile(join(dir, 'demo', 'normal_cam.path'), 'utf8')).trim().split('\n');
+  assert.deepEqual(video, [ids[3], ids[1]].map(id => join(dir, id, 'video.mp4')), 'clip without video is skipped in the video list');
+  const positions = Object.fromEntries((await recorder.list()).map(r => [r.id, r.demo]));
+  assert.equal(positions[ids[3]], 1); assert.equal(positions[ids[1]], 2); assert.equal(positions[ids[2]], 3); assert.equal(positions[ids[0]], null);
+  await recorder.addDemo(ids[0]); await recorder.addDemo(ids[4]);
+  await assert.rejects(recorder.addDemo(ids[5]), { code: 409 });
+  await assert.rejects(recorder.remove(ids[4]), { code: 409 });
+  await recorder.removeDemo(ids[1]);
+  await recorder.removeDemo(ids[1]); // no-op
+  assert.deepEqual((await recorder.status()).demo, [ids[3], ids[2], ids[0], ids[4]]);
+  await recorder.setDemo(ids[5]);
+  assert.deepEqual((await recorder.status()).demo, [ids[5]]);
+  await recorder.setDemo(null);
+  assert.deepEqual((await recorder.status()).demo, []);
+  await assert.rejects(recorder.addDemo('2000-01-01T00-00-00Z'), { code: 404 });
+  const f = await recorder.file(ids[1], 'video.mp4');
+  assert.equal(f.type, 'video/mp4'); assert.equal(f.size, 11); assert.equal(f.path, join(dir, ids[1], 'video.mp4'));
+  assert.equal((await recorder.file(ids[1], 'telemetry.ndjson')).type, 'application/x-ndjson');
+  assert.equal((await recorder.file(ids[1], 'meta.json')).type, 'application/json');
+  await assert.rejects(recorder.file(ids[2], 'video.mp4'), { code: 404 }, 'no video');
+  await assert.rejects(recorder.file(ids[1], '../meta.json'), { code: 404 });
+  await assert.rejects(recorder.file('../etc', 'meta.json'), { code: 404 });
+  await delay(1050);
+  await recorder.start();
+  await assert.rejects(recorder.file(recorder.active.id, 'telemetry.ndjson'), { code: 404 }, 'active recording is not downloadable');
+  await recorder.stop();
 });

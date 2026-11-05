@@ -1,13 +1,16 @@
 // Nagrywanie: wideo przez MediaMTX (record na sciezce, przelaczany jego API) i telemetria z ramek, ktore panel
 // i tak dostaje z gatewaya. Jedno nagranie = katalog <dir>/<id>/ z video.mp4 (fMP4 z MediaMTX, bez transkodowania),
 // telemetry.ndjson (koperty WS gatewaya, jedna na linie) i meta.json. Wybor demo = dwa pliki-wskazniki w <dir>/demo/,
-// ktore czytaja skrypt demo MediaMTX (video) i gateway (telemetria). Limity: czas i rozmiar jednego nagrania,
+// ktore czytaja skrypt demo MediaMTX (video) i gateway (telemetria); jedna linia = jedno nagranie, kilka linii =
+// playlista odtwarzana po kolei w petli (najwyzej MAX_DEMO). Limity: czas i rozmiar jednego nagrania,
 // liczba i laczny rozmiar nagran (rotacja najstarszych; nagranie ustawione jako demo nie jest kasowane).
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile, open } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 
 const ID_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/;
 const MTX_SUBDIR = 'mtx';
+export const MAX_DEMO = 5;
+const FILES = { 'video.mp4': 'video/mp4', 'telemetry.ndjson': 'application/x-ndjson', 'meta.json': 'application/json' };
 
 export function recordingId(date) {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z').replace(/:/g, '-');
@@ -100,9 +103,27 @@ export function createRecorder({
 
   async function readDemo() {
     // Wskaznik telemetrii jest zapisywany zawsze (wideo tylko, gdy nagranie ma obraz), wiec to on wyznacza demo.
+    // Kolejnosc linii = kolejnosc odtwarzania.
     const pointer = await readFile(join(demoDir, 'telemetry.path'), 'utf8').catch(() => '');
-    const id = basename(pointer.trim().replace(/\/telemetry\.ndjson$/, ''));
-    return ID_RE.test(id) ? id : null;
+    const ids = [];
+    for (const line of pointer.split('\n')) {
+      const id = basename(line.trim().replace(/\/telemetry\.ndjson$/, ''));
+      if (ID_RE.test(id) && !ids.includes(id)) ids.push(id);
+    }
+    return ids.slice(0, MAX_DEMO);
+  }
+
+  async function writeDemo(ids) {
+    await mkdir(demoDir, { recursive: true });
+    const metas = [];
+    for (const id of ids) {
+      const meta = await readJson(join(dir, id, 'meta.json'));
+      if (meta && !meta.active) metas.push({ id, video: !!meta.video });
+    }
+    await writeAtomic(join(demoDir, `${cameraName}.path`),
+      metas.filter(m => m.video).map(m => `${join(dir, m.id, 'video.mp4')}\n`).join(''));
+    await writeAtomic(join(demoDir, 'telemetry.path'), metas.map(m => `${join(dir, m.id, 'telemetry.ndjson')}\n`).join(''));
+    notify();
   }
 
   async function list() {
@@ -111,7 +132,7 @@ export function createRecorder({
     for (const id of await listIds()) {
       const meta = await readJson(join(dir, id, 'meta.json'));
       if (!meta) continue;
-      items.push({ ...meta, id, demo: id === demo });
+      items.push({ ...meta, id, demo: demo.includes(id) ? demo.indexOf(id) + 1 : null });
     }
     return items.reverse();
   }
@@ -127,7 +148,7 @@ export function createRecorder({
   }
 
   async function status() {
-    return { active: activeInfo(), demo: await readDemo(), limits, recordings: await list() };
+    return { active: activeInfo(), demo: await readDemo(), maxDemo: MAX_DEMO, limits, recordings: await list() };
   }
 
   async function start(seed = []) {
@@ -244,25 +265,52 @@ export function createRecorder({
     }
   }
 
+  async function finishedMeta(id) {
+    if (!ID_RE.test(id)) throw Object.assign(new Error('Unknown recording'), { code: 404 });
+    const meta = await readJson(join(dir, id, 'meta.json'));
+    if (!meta || meta.active) throw Object.assign(new Error('Unknown recording'), { code: 404 });
+    return meta;
+  }
+
+  // Playlista demo: addDemo doklada nagranie na koniec (kolejnosc klikniec = kolejnosc odtwarzania),
+  // removeDemo wyjmuje jedno, setDemo(id) zastepuje cala playliste jednym nagraniem, setDemo(null) czysci.
   async function setDemo(id) {
-    await mkdir(demoDir, { recursive: true });
-    if (id === null) {
-      await writeAtomic(join(demoDir, `${cameraName}.path`), '');
-      await writeAtomic(join(demoDir, 'telemetry.path'), '');
-    } else {
-      if (!ID_RE.test(id)) throw Object.assign(new Error('Unknown recording'), { code: 404 });
-      const meta = await readJson(join(dir, id, 'meta.json'));
-      if (!meta || meta.active) throw Object.assign(new Error('Unknown recording'), { code: 404 });
-      await writeAtomic(join(demoDir, `${cameraName}.path`), meta.video ? `${join(dir, id, 'video.mp4')}\n` : '');
-      await writeAtomic(join(demoDir, 'telemetry.path'), `${join(dir, id, 'telemetry.ndjson')}\n`);
-    }
-    notify();
+    if (id === null) return writeDemo([]);
+    await finishedMeta(id);
+    await writeDemo([id]);
+  }
+
+  async function addDemo(id) {
+    await finishedMeta(id);
+    const ids = await readDemo();
+    if (ids.includes(id)) return;
+    if (ids.length >= MAX_DEMO) throw Object.assign(new Error(`Demo playlist holds at most ${MAX_DEMO} recordings`), { code: 409 });
+    await writeDemo([...ids, id]);
+  }
+
+  async function removeDemo(id) {
+    if (!ID_RE.test(id)) throw Object.assign(new Error('Unknown recording'), { code: 404 });
+    const ids = await readDemo();
+    if (!ids.includes(id)) return;
+    await writeDemo(ids.filter(x => x !== id));
+  }
+
+  // Plik gotowego nagrania do pobrania: { path, size, type } albo 404 (nieznane / trwajace / brak pliku).
+  async function file(id, name) {
+    const meta = await finishedMeta(id);
+    const type = FILES[name];
+    if (!type) throw Object.assign(new Error('Unknown file'), { code: 404 });
+    if (name === 'video.mp4' && !meta.video) throw Object.assign(new Error('Recording has no video'), { code: 404 });
+    const path = join(dir, id, name);
+    let size;
+    try { size = (await stat(path)).size; } catch { throw Object.assign(new Error('File missing'), { code: 404 }); }
+    return { path, size, type };
   }
 
   async function remove(id) {
     if (!ID_RE.test(id)) throw Object.assign(new Error('Unknown recording'), { code: 404 });
     if (active?.id === id) throw Object.assign(new Error('Recording is active'), { code: 409 });
-    if ((await readDemo()) === id) throw Object.assign(new Error('Recording is the demo source'), { code: 409 });
+    if ((await readDemo()).includes(id)) throw Object.assign(new Error('Recording is the demo source'), { code: 409 });
     const meta = await readJson(join(dir, id, 'meta.json'));
     if (!meta) throw Object.assign(new Error('Unknown recording'), { code: 404 });
     await rm(join(dir, id), { recursive: true, force: true });
@@ -299,7 +347,7 @@ export function createRecorder({
     else if (stopping) await stopping;
   }
 
-  Object.assign(api, { start, stop, record, list, status, setDemo, remove, recover, rotate, close, limits });
+  Object.assign(api, { start, stop, record, list, status, setDemo, addDemo, removeDemo, file, remove, recover, rotate, close, limits });
   Object.defineProperty(api, 'active', { get: activeInfo, enumerable: true });
   return api;
 }

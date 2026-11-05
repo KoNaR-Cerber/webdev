@@ -185,31 +185,37 @@ ma pierwszeństwo przez minutę po każdym swoim odczycie.
 | **Rozmiar** | Wideo i telemetria razem. „bez wideo” oznacza, że kamera nie nadawała. |
 | **Zakończone** | Jak nagranie się skończyło: „ręcznie”, „limit czasu”, „limit rozmiaru”, „restart panelu”. |
 
-Przyciski przy każdym nagraniu: **Ustaw jako demo** / **Wyłącz demo** i **Usuń**.
+Przy każdym zakończonym nagraniu: linki **Wideo ↓** i **Telemetria ↓** (pobieranie plików),
+przycisk **Do demo** / **Usuń z demo** (playlista demo, patrz rozdział 4) i **Usuń**.
 Usunięcie pyta o potwierdzenie i jest nieodwracalne.
 
 ### Ile nagrań się mieści
 
 Serwer trzyma ograniczoną liczbę nagrań (domyślnie 30) i ograniczony łączny rozmiar
 (domyślnie 6 GB). Po każdym zatrzymaniu **najstarsze nagrania są kasowane automatycznie**,
-gdy limit jest przekroczony. Nagranie ustawione jako demo nigdy nie jest kasowane automatycznie.
+gdy limit jest przekroczony. Nagrania z playlisty demo nigdy nie są kasowane automatycznie.
 
-Wniosek: jeśli jakieś nagranie jest ważne, **poproś administratora o skopiowanie plików
-zaraz po sesji** albo ustaw je jako demo, żeby nie zniknęło w rotacji.
+Wniosek: jeśli jakieś nagranie jest ważne, **pobierz je zaraz po sesji** albo dołóż do demo,
+żeby nie zniknęło w rotacji.
 
 ### Jak dostać pliki nagrania
 
-Panel nie ma przycisku pobierania. Pliki leżą na serwerze i kopiuje je administrator.
-Podaj mu nazwę nagrania z tabeli (np. `2026-11-03 10:05:07`). Dostaniesz trzy pliki:
+W tabeli przy zakończonym nagraniu są linki **Wideo ↓** i **Telemetria ↓**. Kliknięcie
+pobiera plik na komputer (w telefonie do folderu pobranych). Nazwa pliku zaczyna się od
+nazwy nagrania, np. `2026-11-03T10-05-07Z-video.mp4`. Wideo może mieć kilkaset MB, więc
+na telefonie lepiej pobierać po Wi‑Fi.
 
-- `video.mp4` — obraz z kamery, otwiera się w każdym odtwarzaczu (VLC, QuickTime, Windows),
+- `video.mp4` — obraz z kamery, otwiera się w każdym odtwarzaczu (VLC, QuickTime, Windows);
+  nagranie bez obrazu nie ma tego linku,
 - `telemetry.ndjson` — dane telemetryczne, jedna linia tekstu na każde zdarzenie,
   do analizy przez osobę techniczną,
-- `meta.json` — czas startu i końca, długość, rozmiary, powód zakończenia.
+- `meta.json` (czas startu i końca, długość, rozmiary, powód zakończenia) ma adres
+  `/recordings/<nazwa>/meta.json`, bez linku w tabeli.
 
 ## 4. Demo: pokaz bez robota
 
-Demo to nagranie odtwarzane **w pętli** jako udawany robot. Służy do pokazów, gdy
+Demo to jedno nagranie albo playlista do 5 nagrań, odtwarzane **po kolei w pętli** jako
+udawany robot (obraz i telemetria razem). Służy do pokazów, gdy
 prawdziwy robot jest wyłączony, i do testów dla partnerów, którzy podłączają się do API.
 Demo działa cały czas, niezależnie od robota.
 
@@ -220,16 +226,23 @@ Co dostają odbiorcy demo:
 - dane telemetryczne z nagrania jako robot o nazwie `cerber-demo` w API
   (to interesuje tylko osoby techniczne po stronie partnera).
 
-Gdy żadne nagranie nie jest ustawione jako demo, demo pokazuje kolorowe pasy testowe
+Gdy playlista demo jest pusta, demo pokazuje kolorowe pasy testowe
 (albo plik przygotowany przez administratora). Panel na żywo pod głównym adresem
 zawsze pokazuje prawdziwego robota, nigdy demo.
 
 ### Ustawianie demo
 
-1. W tabeli nagrań kliknij **Ustaw jako demo** przy wybranym nagraniu.
-2. Nagranie dostaje znacznik **DEMO**, a w rogu karty pojawia się „Demo: <nazwa>”.
+1. W tabeli nagrań kliknij **Do demo** przy pierwszym nagraniu, potem przy kolejnych
+   w takiej kolejności, w jakiej mają lecieć. Każde dostaje znacznik **DEMO 1**, **DEMO 2**…,
+   a pod przyciskiem nagrywania widać całą playlistę w kolejności.
+2. Najwyżej 5 nagrań; przy pełnej playliście przycisk **Do demo** jest wyłączony.
+   **Usuń z demo** wyjmuje jedno nagranie (reszta zachowuje kolejność), **Wyczyść demo**
+   opróżnia playlistę. Żeby zmienić kolejność, wyczyść i dodaj od nowa.
 3. Demo przełącza się w kilka sekund, bez restartów. Osoby oglądające demo
-   zobaczą krótką przerwę w obrazie.
+   zobaczą krótką przerwę w obrazie. Po ostatnim nagraniu playlista zaczyna się od
+   pierwszego; między nagraniami jest sekunda przerwy w telemetrii.
+4. Nagranie bez obrazu daje w demo tylko telemetrię; obraz w tym czasie leci z
+   następnego nagrania z wideo (obraz i telemetria nie są ze sobą ściśle zsynchronizowane).
 
 Tylko jedno nagranie na raz może być demo. Kliknięcie przy innym nagraniu
 przełącza wybór. **Wyłącz demo** wraca do pasów testowych.
