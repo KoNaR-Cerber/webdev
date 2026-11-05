@@ -9,7 +9,7 @@ korpusu, wykresy IMU, pozycje 12 stawów i odometrię z publicznego API. Tylko o
 Na serwerze działa jako serwis `live-panel` z `docker-compose.yml` pod
 `https://cerber.machinekind.ai/` (hasło w przeglądarce, nadaje je Caddy).
 Dashboard teleoperacji jest pod `https://cerber.machinekind.ai/teleop/` (tylko VPN).
-Z panelu da się nagrać do 5 minut wideo i telemetrii i ustawić nagranie jako źródło
+Z panelu da się nagrać do 10 minut wideo i telemetrii i ustawić nagranie jako źródło
 demo (`video/normal_cam/demo` i robot `cerber-demo` w gatewayu); opis w
 [live-panel/README.md](live-panel/README.md).
 

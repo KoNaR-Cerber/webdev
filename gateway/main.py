@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 import inspect
 import math
 import os
@@ -49,7 +50,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logs
 from logs import DropLog, log, why
 from contracts import (
-    API_VERSION, Error, GPSFix, GpsEvent, GpsReceiver, GpsReceiverEvent, Health, Imu, ImuEvent, Joints, JointsEvent,
+    API_VERSION, Error, GPSFix, GpsEvent, GpsReceiver, GpsReceiverEvent, GpsReport, Health, Imu, ImuEvent, Joints, JointsEvent,
     Odometry, OdometryEvent, Ptz, PtzEvent, PtzState, Quaternion, RobotList, RobotStatus, RobotSummary,
     SensorsAlive, SensorsAliveEvent, SnapshotEvent, StatusEvent, TelemetryEventEnvelope,
     TelemetrySnapshot, UltrasoundEvent, Vec3, VideoStream, VideoStreamList,
@@ -354,6 +355,7 @@ if DEMO_ROBOT_ID:
 ros_client = None  # roslibpy.Ros
 ros_ready = False  # WS do rosbridge otwarty (event 'ready' .. 'close'); is_connected roslibpy to samo TCP
 mqtt_connected = False
+mqtt_client = None  # aiomqtt.Client, gdy polaczony: publikacja pozycji z telefonu (POST .../gps)
 
 
 def rosbridge_is_connected() -> bool:
@@ -511,7 +513,7 @@ def start_rosbridge(loop: asyncio.AbstractEventLoop, robot: RobotState):
 
 
 async def mqtt_task(robot: RobotState) -> None:
-    global mqtt_connected
+    global mqtt_connected, mqtt_client
     import aiomqtt
 
     dropped = DropLog("[mqtt]")
@@ -519,6 +521,7 @@ async def mqtt_task(robot: RobotState) -> None:
         try:
             async with aiomqtt.Client(MQTT_HOST, MQTT_PORT) as client:
                 mqtt_connected = True
+                mqtt_client = client
                 robot.check_status()
                 await client.subscribe(MQTT_GPS_TOPIC)
                 await client.subscribe(MQTT_GPS_STATUS_TOPIC)
@@ -529,9 +532,11 @@ async def mqtt_task(robot: RobotState) -> None:
                     except Exception as ex:
                         dropped(topic, ex)
         except asyncio.CancelledError:
+            mqtt_client = None
             raise
         except Exception as ex:
             mqtt_connected = False
+            mqtt_client = None
             robot.check_status()
             log(f"[mqtt] {why(ex)}; reconnect in 3 s")
             await asyncio.sleep(3)
@@ -792,6 +797,38 @@ async def gps_latest(robot_id: str) -> GPSFix:
     if gps is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No GPS fix received yet")
     return gps
+
+
+@app.post("/api/v1/robots/{robot_id}/gps", response_model=GPSFix, status_code=status.HTTP_202_ACCEPTED,
+          tags=["telemetry"], dependencies=[Depends(require_key)],
+          responses={**COMMON_ERRORS, 409: {"model": Error}, 503: {"model": Error}},
+          summary="Pozycja z telefonu operatora (zastepstwo za odbiornik GNSS robota)")
+async def gps_report(robot_id: str, report: GpsReport) -> GPSFix:
+    """Operator stojacy przy robocie wysyla pozycje swojego telefonu (panel: strona /locate). Gateway publikuje
+    ja na MQTT `cerber/gps/data` ze zrodlem `phone`, wiec trafia wszedzie tam, gdzie fix z odbiornika: snapshot,
+    strumien WS, baza telemetrii, nagrania. Swiezy fix gnss (< GPS_GNSS_HOLD_S) ma pierwszenstwo i taka pozycja
+    jest wtedy pomijana. Odpowiedz 202 = przyjete do publikacji; 503 = brak polaczenia z brokerem."""
+    robot = get_robot(robot_id)
+    if isinstance(robot, DemoRobotState):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Demo robot replays a recording")
+    when = report.time or datetime.now(timezone.utc)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    fix = GPSFix(time=when, latitude=report.latitude, longitude=report.longitude,
+                 altitude=report.altitude if report.altitude is not None else 0.0, satellites=0, fix_quality=0,
+                 source="phone", accuracy_m=report.accuracy_m)
+    payload = {"date": when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+               "latitude": fix.latitude, "longitude": fix.longitude, "altitude": fix.altitude,
+               "satellites": 0, "fix_quality": 0, "source": "phone", "accuracy_m": fix.accuracy_m}
+    client = mqtt_client
+    if client is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="MQTT broker not connected")
+    try:
+        await client.publish(MQTT_GPS_TOPIC, json.dumps(payload).encode())
+    except Exception as ex:
+        log(f"[mqtt] publish failed: {why(ex)}")
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="MQTT publish failed") from None
+    return fix
 
 
 @app.get("/api/v1/robots/{robot_id}/streams", response_model=VideoStreamList, tags=["video"],

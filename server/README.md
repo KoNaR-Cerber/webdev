@@ -98,7 +98,7 @@ Pliki w `server/media/` nie trafiają do repo (`.gitignore`); na serwer wgrywa s
 | `RTSP_PORT` | port RTSP na hoście; mapowany zawsze, ale przy `RTSP_ENABLE=no` nic w kontenerze nie słucha | `18554` |
 | `DEMO_STREAMS` | `no` wyłącza strumienie `video/*/demo` | `yes` |
 | `MEDIAMTX_API_PASS` | hasło użytkownika `panel` do API MediaMTX (wpis nr 5 `authInternalUsers`); panel przełącza nim nagrywanie | **wymagane** |
-| `RECORD_MAX_SECONDS`, `RECORD_MAX_BYTES`, `RECORD_KEEP`, `RECORD_TOTAL_BYTES` | limity nagrań z panelu: czas i rozmiar jednego, liczba i łączny rozmiar trzymanych | `300`, `262144000`, `20`, `2147483648` |
+| `RECORD_MAX_SECONDS`, `RECORD_MAX_BYTES`, `RECORD_KEEP`, `RECORD_TOTAL_BYTES` | limity nagrań z panelu: czas i rozmiar jednego, liczba i łączny rozmiar trzymanych | `600`, `629145600`, `30`, `6442450944` |
 | `DEMO_ROBOT_ID` | id robota demo w gatewayu (telemetria z nagrania w pętli) | `cerber-demo` |
 | `PANEL_HOSTS` | nazwy hostów (po przecinku), pod którymi przeglądarka otwiera panel podglądu `/`; inny nagłówek `Host` dostaje 403 | `cerber.machinekind.ai` |
 | `PANEL_ROBOT_ID` | robot pokazywany w panelu podglądu | `cerber-lite3-01` |

@@ -47,11 +47,12 @@
         },
         "source": {
           "default": "gnss",
-          "description": "Skad pozycja: gnss = odbiornik satelitarny, wifi = geolokalizacja po sieciach Wi-Fi (satellites 0, fix_quality 0), cell = po stacji bazowej. Zrodla zastepcze sa pomijane, dopoki jest swiezy fix gnss",
+          "description": "Skad pozycja: gnss = odbiornik satelitarny, wifi = geolokalizacja po sieciach Wi-Fi (satellites 0, fix_quality 0), cell = po stacji bazowej, phone = telefon operatora przy robocie (POST .../gps). Zrodla zastepcze sa pomijane, dopoki jest swiezy fix gnss",
           "enum": [
             "gnss",
             "wifi",
-            "cell"
+            "cell",
+            "phone"
           ],
           "title": "Source",
           "type": "string"

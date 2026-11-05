@@ -82,6 +82,8 @@ punktu, w którym robot zaczął liczyć. Zero to prawidłowy odczyt dla stojąc
 - **Fix · 8 sat.** — pozycja z odbiornika satelitarnego, widzi 8 satelitów. Dokładne.
 - **Wi‑Fi ±40 m** — robot nie widzi satelitów (np. w budynku), pozycja jest
   oszacowana z pobliskich sieci Wi‑Fi. Liczba po ± to promień niepewności w metrach.
+- **Telefon ±8 m** — pozycja z telefonu operatora stojącego przy robocie (patrz
+  „Pozycja z telefonu” niżej). Liczba po ± to dokładność podana przez telefon.
 - **Bez fixu · 3 sat.** — odbiornik działa, ale widzi za mało satelitów. Czeka. Na dworze
   z czystym niebem fix pojawia się zwykle w ciągu kilku minut od włączenia robota.
 - **Brak danych** — pozycja ani stan odbiornika nie dotarły.
@@ -131,12 +133,12 @@ przeglądarka. Możesz zamknąć kartę, a nagranie będzie trwało aż do limit
 - Sprawdź, że kamera pokazuje obraz. Bez obrazu nagranie zapisze samą telemetrię.
   Nagrywanie tego nie przerwie, ale pliku wideo nie będzie.
 - Przeczytaj małą linijkę obok przycisku. Pokazuje aktualne limity, na przykład:
-  „Limit 5:00 lub 250 MB na nagranie · 20 nagrań / 2048 MB łącznie”.
+  „Limit 10:00 lub 600 MB na nagranie · 30 nagrań / 6144 MB łącznie”.
 
 ### Start i stop
 
 1. Kliknij **● Rejestruj**.
-2. Napis w rogu karty zmieni się na **NAGRYWANIE · 0:12 / 5:00** (czas, który minął,
+2. Napis w rogu karty zmieni się na **NAGRYWANIE · 0:12 / 10:00** (czas, który minął,
    i limit). Obok przycisku pokazuje się rozmiar, liczba zapisanych zdarzeń telemetrii
    i ewentualnie „bez obrazu (kamera nie nadaje)”.
 3. Kliknij **■ Zatrzymaj**, gdy skończysz.
@@ -145,12 +147,34 @@ przeglądarka. Możesz zamknąć kartę, a nagranie będzie trwało aż do limit
 
 Nagranie zatrzyma się samo, gdy:
 
-- minie limit czasu (domyślnie 5 minut),
-- rozmiar przekroczy limit (domyślnie 250 MB),
+- minie limit czasu (domyślnie 10 minut),
+- rozmiar przekroczy limit (domyślnie 600 MB),
 - serwer panelu zostanie zrestartowany (wtedy nagranie jest ucięte, ale zapisane).
 
 Jeśli potrzebujesz dłuższej sesji, nagrywaj w kilku kawałkach: zatrzymaj i od razu
 uruchom ponownie. Nagrania w tabeli są w kolejności od najnowszego.
+
+### Pozycja z telefonu
+
+Gdy odbiornik GPS robota nie działa (np. uszkodzony moduł albo odpięta antena), pozycję
+może dostarczyć telefon operatora, który stoi przy robocie. Działa to tak:
+
+1. Otwórz panel w przeglądarce **na telefonie** (nie na laptopie: pozycja laptopa to nie
+   pozycja robota).
+2. Kliknij **● Rejestruj**. Panel sam zacznie wysyłać pozycję telefonu; przeglądarka
+   zapyta o zgodę na lokalizację, zgódź się. Jeśli nie nagrywasz, to samo włącza przycisk
+   **Pozycja z tego telefonu** w karcie GPS.
+3. W karcie GPS pod przyciskiem widać „Wysyłam ±8 m · 25 poz.”. Na mapie pozycja ma
+   napis „Pozycja z telefonu operatora”, a w karcie GPS „Telefon ±8 m”.
+4. Karta panelu musi być na wierzchu, a ekran włączony. Gdy przeglądarka pójdzie w tło,
+   telefon przestaje podawać pozycję i panel pokaże „brak nowych od 20 s (karta w tle?)”.
+   Panel prosi system o niewygaszanie ekranu, ale nie każdy telefon to respektuje.
+5. **■ Nie wysyłaj pozycji telefonu** wyłącza wysyłanie; zatrzymanie nagrania go nie
+   wyłącza.
+
+Pozycja z telefonu trafia wszędzie tam, gdzie pozycja z odbiornika: do nagrania,
+do API partnerów (`source: phone`) i do bazy. Jeśli odbiornik robota znowu złapie fix,
+ma pierwszeństwo przez minutę po każdym swoim odczycie.
 
 ### Tabela nagrań
 
@@ -166,8 +190,8 @@ Usunięcie pyta o potwierdzenie i jest nieodwracalne.
 
 ### Ile nagrań się mieści
 
-Serwer trzyma ograniczoną liczbę nagrań (domyślnie 20) i ograniczony łączny rozmiar
-(domyślnie 2 GB). Po każdym zatrzymaniu **najstarsze nagrania są kasowane automatycznie**,
+Serwer trzyma ograniczoną liczbę nagrań (domyślnie 30) i ograniczony łączny rozmiar
+(domyślnie 6 GB). Po każdym zatrzymaniu **najstarsze nagrania są kasowane automatycznie**,
 gdy limit jest przekroczony. Nagranie ustawione jako demo nigdy nie jest kasowane automatycznie.
 
 Wniosek: jeśli jakieś nagranie jest ważne, **poproś administratora o skopiowanie plików

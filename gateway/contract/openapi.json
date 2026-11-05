@@ -327,6 +327,114 @@
         ]
       }
     },
+    "/api/v1/robots/{robot_id}/gps": {
+      "post": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Pozycja z telefonu operatora (zastepstwo za odbiornik GNSS robota)",
+        "description": "Operator stojacy przy robocie wysyla pozycje swojego telefonu (panel: strona /locate). Gateway publikuje\nja na MQTT `cerber/gps/data` ze zrodlem `phone`, wiec trafia wszedzie tam, gdzie fix z odbiornika: snapshot,\nstrumien WS, baza telemetrii, nagrania. Swiezy fix gnss (< GPS_GNSS_HOLD_S) ma pierwszenstwo i taka pozycja\njest wtedy pomijana. Odpowiedz 202 = przyjete do publikacji; 503 = brak polaczenia z brokerem.",
+        "operationId": "gps_report_api_v1_robots__robot_id__gps_post",
+        "parameters": [
+          {
+            "name": "robot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Robot Id"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GpsReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GPSFix"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
     "/api/v1/robots/{robot_id}/streams": {
       "get": {
         "tags": [
@@ -469,10 +577,11 @@
             "enum": [
               "gnss",
               "wifi",
-              "cell"
+              "cell",
+              "phone"
             ],
             "title": "Source",
-            "description": "Skad pozycja: gnss = odbiornik satelitarny, wifi = geolokalizacja po sieciach Wi-Fi (satellites 0, fix_quality 0), cell = po stacji bazowej. Zrodla zastepcze sa pomijane, dopoki jest swiezy fix gnss",
+            "description": "Skad pozycja: gnss = odbiornik satelitarny, wifi = geolokalizacja po sieciach Wi-Fi (satellites 0, fix_quality 0), cell = po stacji bazowej, phone = telefon operatora przy robocie (POST .../gps). Zrodla zastepcze sa pomijane, dopoki jest swiezy fix gnss",
             "default": "gnss"
           },
           "accuracy_m": {
@@ -537,6 +646,67 @@
         ],
         "title": "GpsReceiver",
         "description": "Z MQTT cerber/gps/status: stan odbiornika GNSS na robocie, co 5 s, takze bez fixu.\nPozwala odroznic 'czeka na satelity' od 'publikator nie dziala' (wtedy gps_receiver_at przestaje rosnac)."
+      },
+      "GpsReport": {
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude",
+            "description": "Szerokosc [deg]"
+          },
+          "longitude": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude",
+            "description": "Dlugosc [deg]"
+          },
+          "accuracy_m": {
+            "type": "number",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Accuracy M",
+            "description": "Promien bledu z telefonu [m]"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000.0,
+                "minimum": -500.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude",
+            "description": "Wysokosc [m n.p.m.], jesli telefon podaje"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time",
+            "description": "Czas pomiaru w telefonie, UTC; brak = teraz"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "latitude",
+          "longitude",
+          "accuracy_m"
+        ],
+        "title": "GpsReport",
+        "description": "Cialo POST /api/v1/robots/{robot_id}/gps: pozycja z telefonu operatora stojacego przy robocie\n(zastepstwo, gdy odbiornik GNSS robota nie dziala). Gateway publikuje ja na MQTT jak kazdy inny fix,\nze zrodlem `phone`; swiezy fix gnss (< GPS_GNSS_HOLD_S) ma pierwszenstwo."
       },
       "HTTPValidationError": {
         "properties": {

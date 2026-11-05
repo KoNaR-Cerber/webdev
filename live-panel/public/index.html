@@ -346,6 +346,17 @@
         align-items: center;
         flex-wrap: wrap;
       }
+      .phone-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      button.phone.on {
+        border-color: var(--cyan);
+        color: var(--cyan);
+      }
       button.record {
         border-color: #6b3a3a;
         background: #2a1b1f;
@@ -681,6 +692,10 @@
             <div class="big" id="gps-fix">Brak danych</div>
             <div class="detail" id="gps-position">
               Oczekiwanie na odbiornik GNSS
+            </div>
+            <div class="phone-controls" id="phone-controls" hidden>
+              <button class="phone" id="phone-toggle">Pozycja z tego telefonu</button>
+              <span class="detail" id="phone-status"></span>
             </div>
           </section>
           <section class="card compact">
@@ -1168,6 +1183,7 @@
         const radius = finite(gps.accuracy_m) ? " ±" + fmt(gps.accuracy_m, 0) + " m" : "";
         if (gps.source === "wifi") return "Wi‑Fi" + radius;
         if (gps.source === "cell") return "BTS" + radius;
+        if (gps.source === "phone") return "Telefon" + radius;
         return gps.fix_quality > 0 ? "Fix · " + gps.satellites + " sat." : "Brak fixu";
       }
       function sourceLabel(gps) {
@@ -1175,6 +1191,8 @@
           return "Szacunek z sieci Wi‑Fi" + (finite(gps.accuracy_m) ? " · promień błędu " + fmt(gps.accuracy_m, 0) + " m" : "");
         if (gps.source === "cell")
           return "Szacunek ze stacji bazowej" + (finite(gps.accuracy_m) ? " · promień błędu " + fmt(gps.accuracy_m, 0) + " m" : "");
+        if (gps.source === "phone")
+          return "Pozycja z telefonu operatora" + (finite(gps.accuracy_m) ? " · promień błędu " + fmt(gps.accuracy_m, 0) + " m" : "");
         return gps.fix_quality > 0 ? "Odbiornik GNSS · " + gps.satellites + " sat." : "Odbiornik GNSS · brak fixu";
       }
       let map = null,
@@ -1430,8 +1448,121 @@
           body.append(tr);
         }
       }
-      $("#record-toggle").onclick = () =>
+      $("#record-toggle").onclick = () => {
+        // Start nagrania na telefonie = od razu wysylaj jego pozycje (odbiornik GNSS robota moze nie dzialac);
+        // na laptopie nie, bo jego pozycja nie jest pozycja robota - tam tylko recznie przyciskiem w karcie GPS.
+        if (!recording?.active && phoneIsHandheld()) phoneStart();
         recordingCall("POST", recording?.active ? "/recordings/stop" : "/recordings");
+      };
+      // --- pozycja z telefonu operatora: watchPosition -> POST /gps/phone (panel dodaje klucz, gateway -> MQTT) ---
+      const PHONE_MIN_INTERVAL_MS = 2000;
+      let phoneWatch = null,
+        phoneLastSentAt = 0,
+        phoneLastUpdateAt = 0,
+        phoneSent = 0,
+        phoneLast = null,
+        phoneError = "",
+        wakeLock = null;
+      const phoneSupported = () => !!navigator.geolocation && window.isSecureContext;
+      const phoneIsHandheld = () =>
+        phoneSupported() && navigator.maxTouchPoints > 0 && matchMedia("(pointer: coarse)").matches;
+      function renderPhone() {
+        const wrap = $("#phone-controls");
+        if (!phoneSupported()) {
+          wrap.hidden = true;
+          return;
+        }
+        wrap.hidden = false;
+        const btn = $("#phone-toggle"),
+          on = phoneWatch !== null;
+        btn.classList.toggle("on", on);
+        btn.textContent = on ? "■ Nie wysyłaj pozycji telefonu" : "Pozycja z tego telefonu";
+        let text = "";
+        if (phoneError) text = phoneError;
+        else if (!on) text = "Zastępstwo za GNSS robota: telefon musi być przy robocie, a ta karta na wierzchu.";
+        else if (!phoneLast) text = "Czekam na GPS telefonu…";
+        else {
+          const age = Math.round((Date.now() - phoneLastUpdateAt) / 1000);
+          text =
+            "Wysyłam ±" + fmt(phoneLast.accuracy_m, 0) + " m · " + phoneSent + " poz." +
+            (age >= 15 ? " · brak nowych od " + age + " s (karta w tle?)" : "");
+        }
+        $("#phone-status").textContent = text;
+      }
+      async function phoneSend(pos) {
+        const c = pos.coords;
+        const body = {
+          latitude: c.latitude,
+          longitude: c.longitude,
+          accuracy_m: Math.min(10000, Math.max(0, finite(c.accuracy) ? c.accuracy : 0)),
+          time: new Date(pos.timestamp).toISOString(),
+        };
+        if (finite(c.altitude)) body.altitude = Math.min(10000, Math.max(-500, c.altitude));
+        try {
+          const res = await fetch("/gps/phone", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) phoneError = "Błąd wysyłki: " + (await res.text());
+          else {
+            phoneError = "";
+            phoneSent++;
+            phoneLast = body;
+          }
+        } catch (e) {
+          phoneError = "Błąd wysyłki: " + e.message;
+        }
+        renderPhone();
+      }
+      function phoneOnPosition(pos) {
+        phoneLastUpdateAt = Date.now();
+        if (Date.now() - phoneLastSentAt < PHONE_MIN_INTERVAL_MS) return;
+        phoneLastSentAt = Date.now();
+        phoneSend(pos);
+      }
+      function phoneOnError(err) {
+        phoneError =
+          err.code === 1
+            ? "Brak zgody na lokalizację w przeglądarce"
+            : err.code === 2
+              ? "Telefon nie ma pozycji (GPS wyłączony?)"
+              : "GPS telefonu nie odpowiada";
+        renderPhone();
+      }
+      async function keepAwake() {
+        try {
+          if (phoneWatch !== null && !wakeLock && navigator.wakeLock && document.visibilityState === "visible")
+            wakeLock = await navigator.wakeLock.request("screen");
+          wakeLock?.addEventListener("release", () => (wakeLock = null));
+        } catch {}
+      }
+      function phoneStart() {
+        if (phoneWatch !== null || !phoneSupported()) return;
+        phoneError = "";
+        phoneSent = 0;
+        phoneLast = null;
+        phoneWatch = navigator.geolocation.watchPosition(phoneOnPosition, phoneOnError, {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 20000,
+        });
+        keepAwake();
+        renderPhone();
+      }
+      function phoneStop() {
+        if (phoneWatch !== null) navigator.geolocation.clearWatch(phoneWatch);
+        phoneWatch = null;
+        wakeLock?.release().catch(() => {});
+        wakeLock = null;
+        renderPhone();
+      }
+      $("#phone-toggle").onclick = () => (phoneWatch === null ? phoneStart() : phoneStop());
+      document.addEventListener("visibilitychange", keepAwake);
+      setInterval(() => {
+        if (phoneWatch !== null) renderPhone();
+      }, 1000);
+      renderPhone();
       setInterval(() => {
         if (recording?.active) renderRecording();
       }, 1000);

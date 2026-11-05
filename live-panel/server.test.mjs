@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
-import { cameraSessionUrl, createPanelServer } from './server.mjs';
+import { cameraSessionUrl, createPanelServer, phoneFix } from './server.mjs';
 
 const KEY = 'test-only-secret-that-must-stay-on-server';
 // MediaMTX answers with a Location relative to the server root; the panel resolves it against the camera URL.
@@ -307,4 +307,54 @@ test('recording endpoints are absent without a recorder', async t => {
   const { base } = await fixture(t);
   assert.equal((await request(base, '/recordings')).status, 404);
   assert.equal((await request(base, '/recordings', { method: 'POST' })).status, 404);
+});
+
+const PHONE = { latitude: 52.3123456, longitude: 21.0123456, accuracy_m: 7.5, altitude: 91.2, time: '2026-11-05T10:30:00.123Z' };
+const postPhone = (base, body, headers = { 'Content-Type': 'application/json' }) =>
+  request(base, '/gps/phone', { method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body) });
+
+test('phone position is validated and forwarded to the gateway with the key', async t => {
+  const calls = [];
+  const { base } = await fixture(t, {
+    fetchImpl: async (url, init) => {
+      calls.push({ url, ...init });
+      return new Response(JSON.stringify({ ...PHONE, source: 'phone' }), { status: 202, headers: { 'Content-Type': 'application/json' } });
+    },
+  });
+  const ok = await postPhone(base, PHONE);
+  assert.equal(ok.status, 202);
+  assert.equal(JSON.parse(ok.body).source, 'phone');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://cerber.machinekind.ai/api/v1/robots/cerber-lite3-01/gps');
+  assert.equal(calls[0].headers['X-API-Key'], KEY);
+  assert.deepEqual(JSON.parse(calls[0].body), PHONE);
+  assert.equal((await postPhone(base, { latitude: 91, longitude: 0, accuracy_m: 1 })).status, 422);
+  assert.equal((await postPhone(base, 'not json')).status, 400);
+  assert.equal((await postPhone(base, PHONE, { 'Content-Type': 'text/plain' })).status, 415);
+  assert.equal((await postPhone(base, { ...PHONE, pad: 'x'.repeat(5000) })).status, 413);
+  assert.equal(calls.length, 1); // nothing invalid reached the gateway
+});
+
+test('phone position maps gateway failures without leaking the key', async t => {
+  let status = 503;
+  const { base } = await fixture(t, { fetchImpl: async () => new Response(`{"detail":"${KEY}"}`, { status }) });
+  assert.equal((await postPhone(base, PHONE)).status, 502); // reflected secret is never passed through
+  status = 503;
+  const { base: base2 } = await fixture(t, { fetchImpl: async () => new Response('{"detail":"MQTT broker not connected"}', { status }) });
+  const down = await postPhone(base2, PHONE);
+  assert.equal(down.status, 503);
+  assert.ok(!down.body.includes(KEY));
+  status = 500;
+  assert.equal((await postPhone(base2, PHONE)).status, 502);
+});
+
+test('phoneFix keeps only a well-formed position', () => {
+  assert.deepEqual(phoneFix({ latitude: 1, longitude: 2, accuracy_m: 3 }), { latitude: 1, longitude: 2, accuracy_m: 3 });
+  assert.deepEqual(phoneFix({ latitude: 1, longitude: 2, accuracy_m: 3, altitude: null, time: 'yesterday', extra: 1 }),
+    { latitude: 1, longitude: 2, accuracy_m: 3 });
+  assert.deepEqual(phoneFix(PHONE), PHONE);
+  for (const bad of [null, [], 'x', { latitude: '1', longitude: 2, accuracy_m: 3 }, { latitude: 1, longitude: 2 },
+    { latitude: 1, longitude: 2, accuracy_m: -1 }, { latitude: NaN, longitude: 2, accuracy_m: 3 }]) {
+    assert.equal(phoneFix(bad), null);
+  }
 });
