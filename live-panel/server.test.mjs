@@ -296,7 +296,24 @@ test('recording endpoints drive the recorder and push state over SSE', async t =
   assert.equal((await post('/recordings/stop')).status, 409);
   assert.equal((await post(`/recordings/${id}/demo`)).status, 204);
   assert.equal((await request(base, `/recordings/${id}`, { method: 'DELETE' })).status, 409, 'demo source is protected');
+  assert.deepEqual(JSON.parse((await request(base, '/recordings')).body).demo, [id]);
+  assert.equal((await request(base, `/recordings/${id}/demo`, { method: 'DELETE' })).status, 204);
+  assert.deepEqual(JSON.parse((await request(base, '/recordings')).body).demo, []);
+  assert.equal((await post(`/recordings/${id}/demo`)).status, 204);
   assert.equal((await request(base, '/recordings/demo', { method: 'DELETE' })).status, 204);
+  // pobieranie: telemetria (2 koperty) i meta, wideo 404 (kamera nie nadawala), trwajace i obce nazwy 404
+  const telemetry = await request(base, `/recordings/${id}/telemetry.ndjson`);
+  assert.equal(telemetry.status, 200);
+  assert.equal(telemetry.headers['content-type'], 'application/x-ndjson');
+  assert.equal(telemetry.headers['content-disposition'], `attachment; filename="${id}-telemetry.ndjson"`);
+  assert.equal(Number(telemetry.headers['content-length']), Buffer.byteLength(telemetry.body));
+  assert.equal(telemetry.body.trim().split('\n').length, 2);
+  const meta = await request(base, `/recordings/${id}/meta.json`);
+  assert.equal(meta.status, 200);
+  assert.equal(JSON.parse(meta.body).id, id);
+  assert.equal((await request(base, `/recordings/${id}/video.mp4`)).status, 404);
+  assert.equal((await request(base, `/recordings/${id}/secret.txt`)).status, 404);
+  assert.equal((await request(base, '/recordings/2000-01-01T00-00-00Z/meta.json')).status, 404);
   assert.equal((await request(base, `/recordings/${id}`, { method: 'DELETE' })).status, 204);
   assert.equal((await post('/recordings/2000-01-01T00-00-00Z/demo')).status, 404);
   assert.equal((await post('/recordings/../etc/demo')).status, 404);

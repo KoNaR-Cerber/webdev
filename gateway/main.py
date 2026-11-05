@@ -13,8 +13,8 @@ Stoi w sieci VPN: czyta rosbridge (ws://JETSON:9090) i MQTT
   WS   /api/v1/robots/{robot_id}/telemetry/stream?api_key=...
   GET  /openapi.json, /docs
 
-Robot demo (DEMO_ROBOT_ID, np. cerber-demo): te same trasy, dane z nagrania telemetrii odtwarzanego
-w petli (plik wskazany w DEMO_TELEMETRY_POINTER, wybierany z panelu live-panel); kamery pod */demo.
+Robot demo (DEMO_ROBOT_ID, np. cerber-demo): te same trasy, dane z nagran telemetrii odtwarzanych
+po kolei w petli (pliki wskazane liniami DEMO_TELEMETRY_POINTER, playlista z panelu live-panel); kamery pod */demo.
 
 WS: kazdy typ zdarzenia najwyzej raz na WS_THROTTLE_S (ostatnia wartosc zawsze dochodzi),
 snapshot aktualny zawsze. Zdarzenie `status` (online, rosbridge/mqtt) od razu przy zmianie i co
@@ -87,6 +87,7 @@ DEMO_TELEMETRY_POINTER = os.getenv("DEMO_TELEMETRY_POINTER", "/recordings/demo/t
 DEMO_POLL_S = float(os.getenv("DEMO_POLL_S", "2"))  # co tyle sprawdzany wskaznik (takze w trakcie odtwarzania)
 DEMO_LOOP_GAP_S = 1.0  # przerwa miedzy kolejnymi przebiegami nagrania
 DEMO_MAX_EVENTS = 100_000  # sufit zdarzen z jednego pliku (5 min publicznego strumienia to ~2 tys.)
+DEMO_MAX_PLAYLIST = 5  # tyle nagran (linii wskaznika) najwyzej odtwarzanych po kolei w petli
 WS_QUEUE_MAX = 100  # ramek w kolejce klienta WS; przepelnienie = wolny klient -> rozlaczenie
 WS_MAX_SIZE = 4096  # max ramka od klienta [B] (po dekompresji); to samo w Dockerfile i README
 WS_CLOSE_WAIT_S = 1.0  # tyle czekamy na wyslanie 1008 do wolnego klienta, potem abort TCP
@@ -545,14 +546,19 @@ async def mqtt_task(robot: RobotState) -> None:
 # --- robot demo: odtwarzanie nagrania ---------------------------------------
 
 
-def read_pointer(path: str) -> Optional[str]:
-    """Pierwsza linia pliku-wskaznika = sciezka nagrania; brak pliku lub pusta linia = brak demo."""
+def read_pointers(path: str) -> list:
+    """Niepuste linie pliku-wskaznika = sciezki nagran odtwarzanych po kolei (najwyzej DEMO_MAX_PLAYLIST, bez
+    powtorzen); brak pliku lub same puste linie = brak demo."""
     try:
         with open(path, encoding="utf-8") as f:
-            line = f.readline().strip()
+            lines = [line.strip() for line in f]
     except OSError:
-        return None
-    return line or None
+        return []
+    paths: list = []
+    for line in lines:
+        if line and line not in paths:
+            paths.append(line)
+    return paths[:DEMO_MAX_PLAYLIST]
 
 
 def load_recording(path: str) -> list:
@@ -579,22 +585,42 @@ def load_recording(path: str) -> list:
     return [(max(0.0, ev.ts - t0), ev) for ev in events]
 
 
-def _source_key(src: Optional[str]):
-    if src is None:
-        return None
-    try:
-        st = os.stat(src)
-    except OSError:
-        return None
-    return (src, st.st_mtime_ns, st.st_size)
+def _source_key(paths: list):
+    """Klucz playlisty: (sciezka, mtime, rozmiar) kazdego istniejacego pliku w kolejnosci; None = nic do grania."""
+    keys = []
+    for src in paths:
+        try:
+            st = os.stat(src)
+        except OSError:
+            continue
+        keys.append((src, st.st_mtime_ns, st.st_size))
+    return tuple(keys) or None
+
+
+def load_playlist(paths: list) -> list:
+    """Nagrania po kolei w jednym przebiegu: czasy wzgledne kolejnego zaczynaja sie DEMO_LOOP_GAP_S po ostatnim
+    zdarzeniu poprzedniego. Plik nieczytelny lub pusty jest pomijany."""
+    out: list = []
+    offset = 0.0
+    for src in paths:
+        try:
+            events = load_recording(src)
+        except Exception as ex:
+            log(f"[demo] cannot read {src}: {why(ex)}")
+            continue
+        if not events:
+            continue
+        out.extend((offset + rel, ev) for rel, ev in events)
+        offset = out[-1][0] + DEMO_LOOP_GAP_S
+    return out
 
 
 async def demo_task(robot: DemoRobotState) -> None:
-    """Petla: wskaznik -> plik -> zdarzenia w oryginalnym tempie, ts = teraz, robot_id = demo; po koncu od nowa.
-    Zmiana wskaznika lub pliku (takze w trakcie przebiegu) przeladowuje nagranie; brak = robot offline."""
+    """Petla: wskaznik -> pliki (playlista) -> zdarzenia w oryginalnym tempie, ts = teraz, robot_id = demo; po koncu
+    od nowa. Zmiana wskaznika lub pliku (takze w trakcie przebiegu) przeladowuje playliste; brak = robot offline."""
     loaded_key, events = None, []
     while True:
-        key = _source_key(read_pointer(DEMO_TELEMETRY_POINTER))
+        key = _source_key(read_pointers(DEMO_TELEMETRY_POINTER))
         if key is None:
             if robot.replaying:
                 robot.replaying = False
@@ -604,13 +630,9 @@ async def demo_task(robot: DemoRobotState) -> None:
             await asyncio.sleep(DEMO_POLL_S)
             continue
         if key != loaded_key:
-            try:
-                events = await asyncio.to_thread(load_recording, key[0])
-            except Exception as ex:
-                log(f"[demo] cannot read {key[0]}: {why(ex)}")
-                events = []
+            events = await asyncio.to_thread(load_playlist, [k[0] for k in key])
             loaded_key = key
-            log(f"[demo] replaying {key[0]}: {len(events)} events")
+            log(f"[demo] replaying {', '.join(k[0] for k in key)}: {len(events)} events")
             if not events and robot.replaying:
                 robot.replaying = False
                 robot.check_status()
@@ -630,7 +652,7 @@ async def demo_task(robot: DemoRobotState) -> None:
                     break
                 if now_m >= next_check:
                     next_check = now_m + DEMO_POLL_S
-                    if _source_key(read_pointer(DEMO_TELEMETRY_POINTER)) != loaded_key:
+                    if _source_key(read_pointers(DEMO_TELEMETRY_POINTER)) != loaded_key:
                         changed = True
                         break
                 await asyncio.sleep(min(wait, max(0.0, next_check - now_m)))

@@ -96,3 +96,52 @@ def test_demo_robot_summary_and_streams_point_at_demo_paths():
         assert live.streams[0].path == "video/normal_cam"
     finally:
         del main.robots["cerber-demo"]
+
+
+def test_pointers_and_playlist_concatenate_in_order(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "DEMO_LOOP_GAP_S", 1.0)
+    a, b, missing = tmp_path / "a.ndjson", tmp_path / "b.ndjson", tmp_path / "nope.ndjson"
+    write_recording(a, t0=100.0, step=0.5)
+    write_recording(b, t0=900.0, step=0.25)
+    pointer = tmp_path / "telemetry.path"
+    pointer.write_text(f"{a}\n\n{missing}\n{b}\n{a}\n")
+    assert main.read_pointers(str(pointer)) == [str(a), str(missing), str(b)], "blank lines and repeats dropped"
+    assert main.read_pointers(str(tmp_path / "absent.path")) == []
+    key = main._source_key(main.read_pointers(str(pointer)))
+    assert [k[0] for k in key] == [str(a), str(b)], "missing file skipped, order kept"
+    assert main._source_key([str(missing)]) is None
+    events = main.load_playlist([str(a), str(missing), str(b)])
+    rels = [rel for rel, _ in events]
+    assert rels == [0.0, 0.5, 1.0, 2.0, 2.25, 2.5], "b starts DEMO_LOOP_GAP_S after the last event of a"
+    assert [e.type for _, e in events] == ["imu", "joints", "imu"] * 2
+    # limit playlisty
+    many = "".join(f"{tmp_path}/r{i}.ndjson\n" for i in range(8))
+    pointer.write_text(many)
+    assert len(main.read_pointers(str(pointer))) == main.DEMO_MAX_PLAYLIST
+
+
+def test_demo_task_plays_playlist_in_order(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "WS_THROTTLE_S", 0)
+    monkeypatch.setattr(main, "DEMO_POLL_S", 0.05)
+    monkeypatch.setattr(main, "DEMO_LOOP_GAP_S", 0.05)
+    pointer = tmp_path / "telemetry.path"
+    monkeypatch.setattr(main, "DEMO_TELEMETRY_POINTER", str(pointer))
+    a, b = tmp_path / "a.ndjson", tmp_path / "b.ndjson"
+    write_recording(a, t0=100.0, step=0.02)
+    b.write_text(envelope("joints", 500.0, {**JOINTS, "position": [0.25] * 12}) + "\n")
+    pointer.write_text(f"{a}\n{b}\n")
+    robot = main.DemoRobotState("cerber-demo")
+    client = Rec()
+    robot.clients.add(client)
+
+    async def run():
+        task = asyncio.create_task(main.demo_task(robot))
+        await asyncio.sleep(0.6)
+        task.cancel()
+        kinds = [e["type"] for _, e in client.frames if e["type"] in ("imu", "joints")]
+        joints = [e["data"]["position"][0] for _, e in client.frames if e["type"] == "joints"]
+        assert kinds[:4] == ["imu", "joints", "imu", "joints"], "a (imu, joints, imu) then b (joints)"
+        assert joints[:2] == [0.5, 0.25] and len(joints) >= 4, "both recordings, looped"
+        assert robot.replaying
+
+    asyncio.run(run())

@@ -410,6 +410,11 @@
         padding: 5px 9px;
         margin-left: 6px;
       }
+      .recordings .actions a.download {
+        margin-left: 6px;
+        color: var(--cyan);
+        white-space: nowrap;
+      }
       .badge {
         font-size: 10px;
         letter-spacing: 0.08em;
@@ -783,6 +788,10 @@
               <button class="record" id="record-toggle">● Rejestruj</button>
               <span class="recording-note" id="recording-info"></span>
             </div>
+            <div class="recording-controls" id="demo-controls" hidden>
+              <span class="recording-note" id="demo-info"></span>
+              <button id="demo-clear">Wyczyść demo</button>
+            </div>
             <table class="recordings" id="recordings" hidden>
               <thead>
                 <tr>
@@ -796,9 +805,9 @@
               <tbody></tbody>
             </table>
             <div class="recording-note" id="recordings-empty">
-              Brak nagrań. Po zatrzymaniu nagranie trafia tu z plikami wideo (fMP4) i telemetrii (NDJSON).
-              „Ustaw jako demo" robi z niego źródło <code>video/normal_cam/demo</code> i robota
-              <code>cerber-demo</code>, odtwarzane w pętli.
+              Brak nagrań. Po zatrzymaniu nagranie trafia tu z plikami wideo (fMP4) i telemetrii (NDJSON) do
+              pobrania. „Do demo" dokłada je do playlisty demo (do 5, w kolejności klikania): źródło
+              <code>video/normal_cam/demo</code> i robot <code>cerber-demo</code> odtwarzają ją po kolei w pętli.
             </div>
           </div>
         </section>
@@ -1391,10 +1400,11 @@
             mb(a.bytes) + " / " + mb(lim.maxBytes) + " · " + a.events + " zdarzeń" +
             (a.video ? "" : " · bez obrazu (kamera nie nadaje)");
         } else {
+          const demoList = recording.demo || [];
           $("#recording-status").textContent = recordingBusy
             ? "…"
-            : recording.demo
-              ? "Demo: " + recording.demo
+            : demoList.length
+              ? "Demo: " + demoList.length + (demoList.length === 1 ? " nagranie" : " nagrania") + " w pętli"
               : "Gotowe";
           $("#recording-info").textContent =
             "Limit " + mmss(lim.maxSeconds) + " lub " + mb(lim.maxBytes) + " na nagranie · " +
@@ -1402,6 +1412,14 @@
             (upstream ? "" : " · czekam na telemetrię");
         }
         const list = recording.recordings || [];
+        const demoIds = recording.demo || [],
+          maxDemo = recording.maxDemo || 5;
+        $("#demo-controls").hidden = !demoIds.length;
+        $("#demo-info").textContent = demoIds.length
+          ? "Playlista demo (" + demoIds.length + "/" + maxDemo + "): " +
+            demoIds.map((id, i) => i + 1 + ". " + id.replace("T", " ").replace(/-(\d\d)-(\d\d)Z$/, ":$1:$2")).join(" · ")
+          : "";
+        $("#demo-clear").disabled = recordingBusy;
         $("#recordings").hidden = !list.length;
         $("#recordings-empty").hidden = !!list.length;
         const body = $("#recordings tbody");
@@ -1423,17 +1441,26 @@
           if (r.demo) {
             const badge = document.createElement("span");
             badge.className = "badge";
-            badge.textContent = "DEMO";
+            badge.textContent = "DEMO " + r.demo;
             tr.firstChild.append(badge);
           }
           const actions = document.createElement("td");
           actions.className = "actions";
           if (!r.active) {
+            for (const [file, label] of [["video.mp4", "Wideo ↓"], ["telemetry.ndjson", "Telemetria ↓"]]) {
+              if (file === "video.mp4" && !r.video) continue;
+              const a = document.createElement("a");
+              a.className = "download";
+              a.href = "/recordings/" + r.id + "/" + file;
+              a.setAttribute("download", r.id + "-" + file);
+              a.textContent = label;
+              actions.append(a);
+            }
             const demoBtn = document.createElement("button");
-            demoBtn.textContent = r.demo ? "Wyłącz demo" : "Ustaw jako demo";
-            demoBtn.disabled = recordingBusy;
-            demoBtn.onclick = () =>
-              recordingCall(r.demo ? "DELETE" : "POST", r.demo ? "/recordings/demo" : "/recordings/" + r.id + "/demo");
+            demoBtn.textContent = r.demo ? "Usuń z demo" : "Do demo";
+            demoBtn.disabled = recordingBusy || (!r.demo && demoIds.length >= maxDemo);
+            demoBtn.title = !r.demo && demoIds.length >= maxDemo ? "Playlista demo jest pełna (" + maxDemo + ")" : "";
+            demoBtn.onclick = () => recordingCall(r.demo ? "DELETE" : "POST", "/recordings/" + r.id + "/demo");
             actions.append(demoBtn);
             const del = document.createElement("button");
             del.textContent = "Usuń";
@@ -1448,6 +1475,9 @@
           body.append(tr);
         }
       }
+      $("#demo-clear").onclick = () => {
+        if (confirm("Wyczyścić playlistę demo? Nagrania zostają.")) recordingCall("DELETE", "/recordings/demo");
+      };
       $("#record-toggle").onclick = () => {
         // Start nagrania na telefonie = od razu wysylaj jego pozycje (odbiornik GNSS robota moze nie dzialac);
         // na laptopie nie, bo jego pozycja nie jest pozycja robota - tam tylko recznie przyciskiem w karcie GPS.
