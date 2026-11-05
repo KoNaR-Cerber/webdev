@@ -166,9 +166,12 @@ może dostarczyć telefon operatora, który stoi przy robocie. Działa to tak:
    **Pozycja z tego telefonu** w karcie GPS.
 3. W karcie GPS pod przyciskiem widać „Wysyłam ±8 m · 25 poz.”. Na mapie pozycja ma
    napis „Pozycja z telefonu operatora”, a w karcie GPS „Telefon ±8 m”.
-4. Karta panelu musi być na wierzchu, a ekran włączony. Gdy przeglądarka pójdzie w tło,
-   telefon przestaje podawać pozycję i panel pokaże „brak nowych od 20 s (karta w tle?)”.
-   Panel prosi system o niewygaszanie ekranu, ale nie każdy telefon to respektuje.
+4. Karta panelu musi być na wierzchu, a ekran włączony. Gdy przeglądarka pójdzie w tło
+   albo telefon stoi w miejscu, nowe pomiary przestają przychodzić. Panel wtedy co 10 s
+   wysyła ponownie ostatnią znaną pozycję (z czasem tamtego pomiaru), żeby nagranie
+   miało ciągły ślad, i pokazuje „ostatni pomiar 40 s temu, podtrzymuję pozycję”.
+   Panel prosi system o niewygaszanie ekranu, ale nie każdy telefon to respektuje,
+   więc na czas nagrania wyłącz w telefonie automatyczną blokadę ekranu.
 5. **■ Nie wysyłaj pozycji telefonu** wyłącza wysyłanie; zatrzymanie nagrania go nie
    wyłącza.
 
