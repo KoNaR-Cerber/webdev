@@ -1486,10 +1486,15 @@
       };
       // --- pozycja z telefonu operatora: watchPosition -> POST /gps/phone (panel dodaje klucz, gateway -> MQTT) ---
       const PHONE_MIN_INTERVAL_MS = 2000;
+      // Bez nowego pomiaru (telefon stoi w miejscu albo przegladarka przycina GPS) ostatnia pozycja idzie ponownie
+      // co PHONE_RESEND_MS z oryginalnym czasem pomiaru: nagranie ma ciagly slad, a mapa widzi, ze pozycja jest
+      // podtrzymywana, nie zgubiona.
+      const PHONE_RESEND_MS = 10000;
       let phoneWatch = null,
         phoneLastSentAt = 0,
         phoneLastUpdateAt = 0,
         phoneSent = 0,
+        phoneResent = 0,
         phoneLast = null,
         phoneError = "",
         wakeLock = null;
@@ -1515,19 +1520,12 @@
           const age = Math.round((Date.now() - phoneLastUpdateAt) / 1000);
           text =
             "Wysyłam ±" + fmt(phoneLast.accuracy_m, 0) + " m · " + phoneSent + " poz." +
-            (age >= 15 ? " · brak nowych od " + age + " s (karta w tle?)" : "");
+            (phoneResent ? " (+" + phoneResent + " podtrzymań)" : "") +
+            (age >= 15 ? " · ostatni pomiar " + age + " s temu, podtrzymuję pozycję" : "");
         }
         $("#phone-status").textContent = text;
       }
-      async function phoneSend(pos) {
-        const c = pos.coords;
-        const body = {
-          latitude: c.latitude,
-          longitude: c.longitude,
-          accuracy_m: Math.min(10000, Math.max(0, finite(c.accuracy) ? c.accuracy : 0)),
-          time: new Date(pos.timestamp).toISOString(),
-        };
-        if (finite(c.altitude)) body.altitude = Math.min(10000, Math.max(-500, c.altitude));
+      async function phonePost(body, resend) {
         try {
           const res = await fetch("/gps/phone", {
             method: "POST",
@@ -1537,13 +1535,30 @@
           if (!res.ok) phoneError = "Błąd wysyłki: " + (await res.text());
           else {
             phoneError = "";
-            phoneSent++;
+            if (resend) phoneResent++;
+            else phoneSent++;
             phoneLast = body;
           }
         } catch (e) {
           phoneError = "Błąd wysyłki: " + e.message;
         }
         renderPhone();
+      }
+      function phoneSend(pos) {
+        const c = pos.coords;
+        const body = {
+          latitude: c.latitude,
+          longitude: c.longitude,
+          accuracy_m: Math.min(10000, Math.max(0, finite(c.accuracy) ? c.accuracy : 0)),
+          time: new Date(pos.timestamp).toISOString(),
+        };
+        if (finite(c.altitude)) body.altitude = Math.min(10000, Math.max(-500, c.altitude));
+        return phonePost(body, false);
+      }
+      function phoneResend() {
+        if (phoneWatch === null || !phoneLast || Date.now() - phoneLastSentAt < PHONE_RESEND_MS) return;
+        phoneLastSentAt = Date.now();
+        phonePost(phoneLast, true);
       }
       function phoneOnPosition(pos) {
         phoneLastUpdateAt = Date.now();
@@ -1571,6 +1586,7 @@
         if (phoneWatch !== null || !phoneSupported()) return;
         phoneError = "";
         phoneSent = 0;
+        phoneResent = 0;
         phoneLast = null;
         phoneWatch = navigator.geolocation.watchPosition(phoneOnPosition, phoneOnError, {
           enableHighAccuracy: true,
@@ -1590,7 +1606,9 @@
       $("#phone-toggle").onclick = () => (phoneWatch === null ? phoneStart() : phoneStop());
       document.addEventListener("visibilitychange", keepAwake);
       setInterval(() => {
-        if (phoneWatch !== null) renderPhone();
+        if (phoneWatch === null) return;
+        phoneResend();
+        renderPhone();
       }, 1000);
       renderPhone();
       setInterval(() => {
