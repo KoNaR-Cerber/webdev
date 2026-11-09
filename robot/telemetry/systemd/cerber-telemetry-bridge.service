@@ -1,0 +1,43 @@
+[Unit]
+Description=Cerber subscribe-only rosbridge over VPN (ROS domain 42)
+Requires=docker.service
+Wants=network-online.target netbird.service
+After=docker.service network-online.target netbird.service
+PartOf=docker.service
+RequiresMountsFor=/opt/cerber-telemetry
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/cerber-telemetry
+EnvironmentFile=/opt/cerber-telemetry/runtime.env
+ExecStartPre=/usr/bin/test -r /opt/cerber-telemetry/runtime.env
+ExecStartPre=/usr/bin/docker image inspect --format={{.Id}} ${CERBER_TELEMETRY_IMAGE}
+ExecStartPre=-/usr/bin/docker rm -f cerber-telemetry-bridge
+ExecStart=/usr/bin/docker run --name cerber-telemetry-bridge \
+    --label io.machinekind.cerber.owner=cerber-telemetry \
+    --label io.machinekind.cerber.role=bridge \
+    --pull=never --restart=no --init --stop-signal=SIGINT --stop-timeout=10 \
+    --network=host --ipc=host --runtime=runc \
+    --user=2002:2002 --cap-drop=ALL --security-opt=no-new-privileges \
+    --read-only --tmpfs=/tmp:rw,nosuid,nodev,size=67108864,mode=1777 \
+    --pids-limit=256 --memory=1g \
+    --log-driver=local --log-opt=max-size=10m --log-opt=max-file=3 \
+    --env-file=/opt/cerber-telemetry/runtime.env \
+    --env=HOME=/tmp --env=ROS_LOG_DIR=/tmp/ros \
+    --env=ROS_DOMAIN_ID=42 --env=ROS_LOCALHOST_ONLY=1 \
+    --env=RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+    ${CERBER_TELEMETRY_IMAGE}
+ExecStop=-/usr/bin/docker stop --time=10 cerber-telemetry-bridge
+ExecStopPost=-/usr/bin/docker rm -f cerber-telemetry-bridge
+Restart=always
+RestartSec=5s
+TimeoutStartSec=30s
+TimeoutStopSec=20s
+KillSignal=SIGINT
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cerber-telemetry-bridge
+
+[Install]
+WantedBy=multi-user.target

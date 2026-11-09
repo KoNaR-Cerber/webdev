@@ -1,0 +1,30 @@
+[Unit]
+Description=Cerber Quectel GNSS to MQTT publisher
+Wants=network-online.target netbird.service
+After=network-online.target netbird.service ModemManager.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=cerber
+Group=cerber
+SupplementaryGroups=dialout
+EnvironmentFile=/etc/cerber/gps.env
+ExecStartPre=/opt/cerber-gps/robot_gps --check-config
+ExecStart=/opt/cerber-gps/robot_gps
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET
+MemoryMax=128M
+TasksMax=16
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

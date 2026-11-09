@@ -30,6 +30,9 @@ A React-based web interface for remotely monitoring and controlling a ROS 2 robo
 Run the Vite development server with hot-module replacement.
     npm run dev
 
+The app is built with `base: '/teleop/'` (see `vite.config.js`), so open `http://localhost:5173/teleop/`.
+On the server Caddy serves the bundle under `/teleop/` (VPN only); `/` is the read-only live panel.
+
 **Production Build:**
 To build the app for production deployment:
     npm run build

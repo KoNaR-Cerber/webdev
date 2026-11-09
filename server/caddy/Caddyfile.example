@@ -1,0 +1,122 @@
+# Wzor konfiguracji Caddy dla stacku staging (reverse proxy przed docker-compose). Zywy plik lezy poza repo
+# (/opt/infra/caddy/server/Caddyfile) i zawiera inne vhosty infrastruktury; tu jest tylko nasz host.
+# Placeholdery: <VPN_CIDR> (siec NetBird), <ROBOT_VPN_IP> (rosbridge robota), <ACME_EMAIL>,
+# <PANEL_LOGIN> <BCRYPT_HASH> (scripts/server/caddy-panel-password.sh ustawia je bez edycji recznej).
+# Nazwy upstreamow to container_name z docker-compose.yml dla PROJECT_NAME=cerber-staging.
+{
+    email <ACME_EMAIL>
+    acme_ca https://acme.zerossl.com/v2/DV90
+    # Domyslny logger (stderr -> docker logs): bledy 502 itp. niosa request>uri, wiec klucz WS z query ma nie trafic do logow.
+    log {
+        format filter {
+            request>uri query {
+                delete api_key
+            }
+            request>headers>X-Api-Key delete
+        }
+    }
+}
+
+(staging_site) {
+    # Gateway telemetrii (read-only, klucz API): robots + health + docs.
+    @gateway path /health /api/v1/robots /api/v1/robots/* /docs /openapi.json
+    handle @gateway {
+        reverse_proxy cerber-staging-gateway:8000 {
+            stream_close_delay 5m
+        }
+    }
+
+    # Publikacja wideo (WHIP) ma isc wylacznie przez SRT po VPN. Z sieci VPN (NetBird) wszystko dziala jak dotad.
+
+    @whip {
+        path /video/*/whip /video/*/whip/* /video/*/*/whip /video/*/*/whip/*
+        not remote_ip <VPN_CIDR>
+    }
+    handle @whip {
+        respond 403
+    }
+
+    # Backend tylko z VPN (2026-11-02): jego GET-y (/api/v1/mqtt/gps, /mqtt/topics, /ros/status) nie maja klucza
+    # i omijalyby klucz gateway; POST /subscribe to sterowanie. Publiczne API to wylacznie trasy gateway wyzej.
+    handle /api/* {
+        @vpn_api remote_ip <VPN_CIDR>
+        handle @vpn_api {
+            reverse_proxy cerber-staging-backend:3000
+        }
+        handle {
+            respond 403
+        }
+    }
+
+    # Teleoperacja: WebSocket rosbridge na robocie (adres NetBird), tylko dla klientow z sieci VPN.
+    # Sterowanie nie jest publiczne: spoza VPN 403. handle_path obcina /rosbridge, bo rosbridge slucha na /.
+    handle_path /rosbridge {
+        @vpn remote_ip <VPN_CIDR>
+        handle @vpn {
+            reverse_proxy <ROBOT_VPN_IP>:9090
+        }
+        handle {
+            respond 403
+        }
+    }
+
+    # Wideo: WHEP (WebRTC) z MediaMTX. Sygnalizacja idzie tu po HTTPS, same media po ICE na porcie
+    # STREAM_PORT (UDP/TCP) wprost do hosta, poza Caddy.
+    # Wideo. Kamery robota, dron i demo (video/*/demo; nagranie demo moze pokazywac wrazliwe miejsca): z VPN bez klucza,
+    # z internetu z naglowkiem X-API-Key (ten sam klucz co telemetria; sprawdza go gateway przez forward_auth,
+    # GET /api/v1/robots -> 2xx = OK, 401 wraca do klienta). Cialo POST (SDP) idzie dalej nienaruszone.
+    handle /video/* {
+        @vpn_video remote_ip <VPN_CIDR>
+        handle @vpn_video {
+            reverse_proxy cerber-staging-mediamtx:8889 {
+                header_down Access-Control-Allow-Headers "Authorization, Content-Type, If-Match, X-API-Key"
+            }
+        }
+        # Preflight CORS (OPTIONS) nie niesie X-API-Key i nic nie zmienia, wiec bez forward_auth;
+        # MediaMTX nie wymienia X-API-Key w Allow-Headers, stad header_down na odpowiedziach.
+        @preflight method OPTIONS
+        handle @preflight {
+            reverse_proxy cerber-staging-mediamtx:8889 {
+                header_down Access-Control-Allow-Headers "Authorization, Content-Type, If-Match, X-API-Key"
+            }
+        }
+        handle {
+            forward_auth cerber-staging-gateway:8000 {
+                uri /api/v1/robots
+            }
+            reverse_proxy cerber-staging-mediamtx:8889 {
+                header_down Access-Control-Allow-Headers "Authorization, Content-Type, If-Match, X-API-Key"
+            }
+        }
+    }
+
+
+    # Dashboard teleoperacji pod /teleop/ (bundle budowany z base=/teleop/), tylko z VPN; spoza VPN 403.
+    # handle_path obcina /teleop, bo pliki w dist leza w korzeniu.
+    redir /teleop /teleop/ 308
+    handle_path /teleop/* {
+        @vpn_spa remote_ip <VPN_CIDR>
+        handle @vpn_spa {
+            root * /srv/staging-frontend-dist
+            try_files {path} /index.html
+            file_server
+        }
+        handle {
+            respond "Dashboard dostepny tylko z sieci VPN. Publiczne API: /docs, wideo: /video/<kamera>/" 403
+        }
+    }
+
+    # Panel podgladu (read-only) pod /: z internetu, haslo w przegladarce (basic_auth). Klucz API trzyma kontener
+    # panelu (serwis live-panel w docker-compose.yml); przegladarka dostaje przez niego SSE (/events) i sygnalizacje
+    # WHEP (/whep, /session/*). Media (ICE) ida jak dotad wprost z MediaMTX. Nowy hash: docker exec -i caddy caddy hash-password
+    handle {
+        basic_auth bcrypt "Cerber" {
+            <PANEL_LOGIN> <BCRYPT_HASH>
+        }
+        reverse_proxy cerber-staging-live-panel:8765
+    }
+}
+
+cerber.machinekind.ai {
+    import staging_site
+}

@@ -2,5 +2,16 @@
 postman
 .postman
 /backend/app/__pycache__
+/gateway/__pycache__
+/gateway/tests/__pycache__
+/gateway/.pytest_cache
 /server/influxdb/config/influx-configs
 /server/influxdb/data
+# nagrania demo (duze pliki), trzymane poza repo
+/server/media/*
+!/server/media/.gitkeep
+
+# paczki dla zespolow (scripts/package-public-api.sh)
+/dist/
+__pycache__/
+*.pyc

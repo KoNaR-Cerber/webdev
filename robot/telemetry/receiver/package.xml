@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>cerber_telemetry</name>
+  <version>0.2.0</version>
+  <description>Receive-only Lite3 UDP telemetry, derived from existing Cerber firmware.</description>
+  <maintainer email="marcin@machinekind.ai">Machinekind</maintainer>
+  <license>LicenseRef-Inherited-Firmware-Not-Specified</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2</depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

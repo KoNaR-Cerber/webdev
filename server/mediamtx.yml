@@ -1,15 +1,118 @@
-protocols: [udp]
+# MediaMTX: wejscia od nadawcow, wyjscie WebRTC/WHEP dla przegladarek (za reverse proxy, trasa /video/*).
+#  - SRT (:8890)  : kamery robota; publikowanie bez hasla, ale tylko z adresow z ROBOT_PUBLISH_IPS (.env, siec VPN).
+#  - RTMP (:1935) : dron DJI z internetu; publikowanie wymaga loginu i hasla z .env (patrz authInternalUsers).
+#  - RTSP (:8554) : opcjonalne wyjscie diagnostyczne (ffplay/VLC), domyslnie wylaczone; wlacza .env przez MTX_RTSP.
+# Nieuzywane protokoly wylaczone, zeby kontener nie nasluchiwal na zbednych portach.
+hls: no
+moq: no
+
+rtsp: no
+# Tylko TCP: RTP/RTCP po UDP wymagaloby dodatkowych portow w compose i firewallu.
+rtspTransports: [tcp]
+rtspAddress: :8554
+
+rtmp: yes
+rtmpAddress: :1935
+
 webrtc: yes
 webrtcAddress: :8889
+# ICE: MediaMTX oglasza klientom port, na ktorym sam nasluchuje, wiec w docker-compose musi byc
+# zmapowany 1:1 (ten sam numer w kontenerze i na hoscie). Wartosc nadpisuje .env przez
+# MTX_WEBRTCLOCALUDPADDRESS / MTX_WEBRTCLOCALTCPADDRESS (patrz docker-compose.yml).
+webrtcLocalUDPAddress: :8189
 webrtcLocalTCPAddress: :8189
 webrtcIPsFromInterfaces: yes
-webrtcAdditionalHosts:
-  - 10.13.13.1
+# Adresy, pod ktorymi przegladarki widza serwer (publiczne IP / nazwa). Ustawiane w .env przez
+# MTX_WEBRTCADDITIONALHOSTS (lista po przecinku), zeby adresy infrastruktury nie siedzialy w repo.
+webrtcAdditionalHosts: []
 
 srt: yes
 srtAddress: :8890
+
+# API sterujace (nagrywanie z panelu): tylko w sieci docker, bez portu na hoscie; login we wpisie nr 5 authInternalUsers.
+api: yes
+apiAddress: :9997
+
+# Nagrywanie (wlaczane na sciezce przez API, domyslnie wylaczone): fMP4 bez transkodowania do wspolnego wolumenu
+# /recordings (live-panel przenosi gotowy plik do katalogu nagrania; gateway czyta stamtad telemetrie demo).
+pathDefaults:
+  record: no
+  recordPath: /recordings/mtx/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 1h
+
+# Uprawnienia. Kolejnosc wpisow ma znaczenie dla nadpisan z .env (MTX_AUTHINTERNALUSERS_<indeks>_...).
+authMethod: internal
+authInternalUsers:
+  # 0: odczyt publiczny (decyzja z 2026-10-31: odtwarzanie bez logowania, jak telemetria).
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: read
+      - action: playback
+  # 1: publikowanie bez hasla tylko na kamery robota. Lista ips to jedyna blokada: RTMP (:1935) jest
+  #    publiczny i uzywa tych samych uprawnien, wiec bez niej kazdy z internetu moglby podmienic obraz
+  #    kamery robota. Tu tylko localhost; siec VPN dopisuje .env przez MTX_AUTHINTERNALUSERS_1_IPS
+  #    (ROBOT_PUBLISH_IPS w docker-compose.yml, lista CIDR po przecinku).
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: publish
+        path: '~^video/(normal_cam|IR_cam)$'
+  # 2: nadawca drona (RTMP z internetu). Login i haslo ustawia .env przez
+  #    MTX_AUTHINTERNALUSERS_2_USER / MTX_AUTHINTERNALUSERS_2_PASS (docker-compose wymaga obu).
+  #    Wartosci ponizej to tylko zaslepki, kontener bez nadpisania nie przyjmie strumienia.
+  - user: dji
+    pass: set-in-env
+    ips: []
+    permissions:
+      - action: publish
+        path: video/dji01
+  # 3: strumienie demo: ffmpeg uruchamiany przez MediaMTX (runOnInit) publikuje z localhost,
+  #    tylko na sciezki */demo. Z zewnatrz publikowanie na nie jest odrzucane.
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: publish
+        path: '~^video/[^/]+/demo$'
+  # 4: metryki/pprof tylko z localhost (jak w konfiguracji domyslnej).
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: api
+      - action: metrics
+      - action: pprof
+  # 5: API dla panelu (przelaczanie nagrywania). Login i haslo z .env przez MTX_AUTHINTERNALUSERS_5_USER/_PASS
+  #    (MEDIAMTX_API_PASS w docker-compose.yml); wartosci ponizej to zaslepki.
+  - user: panel
+    pass: set-in-env
+    ips: []
+    permissions:
+      - action: api
+
 paths:
   video/normal_cam:
     source: publisher
   video/IR_cam:
     source: publisher
+  # Dron DJI Mavic 3M: rtmp://<host>:1935/video/dji01?user=<login>&pass=<haslo>
+  video/dji01:
+    source: publisher
+
+  # Demo: obraz generowany w kontenerze (server/mediamtx-demo.sh), do pokazow bez sprzetu.
+  # Odtwarzanie jak kazdej innej sciezki: /video/<kamera>/demo/ (odtwarzacz) albo POST /video/<kamera>/demo/whep.
+  # Zrodlo (w tej kolejnosci): nagranie wybrane w panelu (/recordings/demo/<kamera>.path), plik
+  # /media/<kamera>.mp4 (katalog server/media), obraz testowy. Zmiana wyboru restartuje ffmpeg bez restartu MediaMTX.
+  video/dji01/demo:
+    source: publisher
+    runOnInit: /demo.sh
+    runOnInitRestart: yes
+  video/normal_cam/demo:
+    source: publisher
+    runOnInit: /demo.sh
+    runOnInitRestart: yes
